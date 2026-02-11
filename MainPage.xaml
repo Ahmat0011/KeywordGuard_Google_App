@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="LanguageData.MainPage"
+             BackgroundColor="#0d1117"
+             Shell.NavBarIsVisible="False">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20,20" Spacing="14">
+
+            <!-- Header -->
+            <Label Text="Language Data"
+                   FontSize="26" FontAttributes="Bold"
+                   TextColor="White" HorizontalTextAlignment="Center" />
+            <Label Text="v1.0"
+                   FontSize="12" TextColor="#8b949e"
+                   HorizontalTextAlignment="Center" Margin="0,-10,0,0" />
+
+            <!-- Setup Buttons -->
+            <Frame BackgroundColor="#161b22" BorderColor="#30363d"
+                   CornerRadius="8" Padding="12" HasShadow="False">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Einrichtung" FontSize="14"
+                           TextColor="#8b949e" FontAttributes="Bold" />
+                    <Button Text="Bedienungshilfen aktivieren"
+                            Clicked="OnOpenAccessibilityClicked"
+                            BackgroundColor="#238636" TextColor="White"
+                            FontSize="14" CornerRadius="6" HeightRequest="42" />
+                    <Button Text="Geraeteadministrator aktivieren"
+                            Clicked="OnOpenDeviceAdminClicked"
+                            BackgroundColor="#238636" TextColor="White"
+                            FontSize="14" CornerRadius="6" HeightRequest="42" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Timer Input -->
+            <Frame BackgroundColor="#161b22" BorderColor="#30363d"
+                   CornerRadius="8" Padding="12" HasShadow="False">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Schutzdauer" FontSize="14"
+                           TextColor="#8b949e" FontAttributes="Bold" />
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                        <VerticalStackLayout Grid.Column="0">
+                            <Label Text="Tage" FontSize="11"
+                                   TextColor="#8b949e" HorizontalTextAlignment="Center" />
+                            <Entry x:Name="EntryDays" Text="{Binding Days}"
+                                   Keyboard="Numeric" HorizontalTextAlignment="Center"
+                                   BackgroundColor="#0d1117" TextColor="White"
+                                   FontSize="18" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="1">
+                            <Label Text="Stunden" FontSize="11"
+                                   TextColor="#8b949e" HorizontalTextAlignment="Center" />
+                            <Entry x:Name="EntryHours" Text="{Binding Hours}"
+                                   Keyboard="Numeric" HorizontalTextAlignment="Center"
+                                   BackgroundColor="#0d1117" TextColor="White"
+                                   FontSize="18" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="2">
+                            <Label Text="Minuten" FontSize="11"
+                                   TextColor="#8b949e" HorizontalTextAlignment="Center" />
+                            <Entry x:Name="EntryMinutes" Text="{Binding Minutes}"
+                                   Keyboard="Numeric" HorizontalTextAlignment="Center"
+                                   BackgroundColor="#0d1117" TextColor="White"
+                                   FontSize="18" />
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <Button x:Name="BtnStartTimer"
+                            Text="TIMER STARTEN &amp; BLOCKIEREN"
+                            Clicked="OnStartTimerClicked"
+                            IsVisible="{Binding CanStartTimer}"
+                            BackgroundColor="#da3633" TextColor="White"
+                            FontSize="15" FontAttributes="Bold"
+                            CornerRadius="6" HeightRequest="48" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Countdown -->
+            <Frame BackgroundColor="#161b22" BorderColor="#da3633"
+                   CornerRadius="8" Padding="12" HasShadow="False"
+                   IsVisible="{Binding IsCountdownVisible}">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Verbleibende Zeit"
+                           FontSize="12" TextColor="#da3633"
+                           HorizontalTextAlignment="Center" />
+                    <Label x:Name="LblCountdown"
+                           Text="{Binding CountdownText}"
+                           FontSize="28" FontAttributes="Bold"
+                           TextColor="White" HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- PROTECTION Text (5-tap reveal) -->
+            <Label x:Name="LblProtect"
+                   Text="PROTECTION"
+                   FontSize="22" FontAttributes="Bold"
+                   TextColor="#1f6feb"
+                   HorizontalTextAlignment="Center"
+                   Padding="0,12">
+                <Label.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnProtectTapped" />
+                </Label.GestureRecognizers>
+            </Label>
+
+            <!-- Keyword Input -->
+            <Frame BackgroundColor="#161b22" BorderColor="#30363d"
+                   CornerRadius="8" Padding="12" HasShadow="False">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Keyword-Sperre" FontSize="14"
+                           TextColor="#8b949e" FontAttributes="Bold" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry x:Name="EntryKeyword" Grid.Column="0"
+                               Text="{Binding KeywordInput}"
+                               Placeholder="Gesperrtes Wort eingeben..."
+                               PlaceholderColor="#484f58"
+                               BackgroundColor="#0d1117" TextColor="White"
+                               FontSize="15" />
+                        <Button Grid.Column="1" Text="+"
+                                Clicked="OnAddKeywordClicked"
+                                BackgroundColor="#238636" TextColor="White"
+                                FontSize="18" FontAttributes="Bold"
+                                WidthRequest="48" HeightRequest="42"
+                                CornerRadius="6" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                        <Switch x:Name="SwitchAggressive" Grid.Column="0"
+                                IsToggled="{Binding IsAggressiveInput}"
+                                OnColor="#da3633" ThumbColor="White" />
+                        <Label Grid.Column="1" Text="Aggressiv (Teilwort-Match)"
+                               TextColor="#c9d1d9" FontSize="13"
+                               VerticalTextAlignment="Center" />
+                    </Grid>
+
+                    <Button Text="Alle loeschen"
+                            Clicked="OnClearAllClicked"
+                            IsVisible="{Binding CanClearAll}"
+                            BackgroundColor="#6e4017" TextColor="White"
+                            FontSize="13" CornerRadius="6" HeightRequest="36" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Keyword List -->
+            <Frame BackgroundColor="#161b22" BorderColor="#30363d"
+                   CornerRadius="8" Padding="12" HasShadow="False"
+                   IsVisible="{Binding KeywordsVisible}">
+                <VerticalStackLayout Spacing="6">
+                    <Label Text="Gesperrte Keywords" FontSize="14"
+                           TextColor="#8b949e" FontAttributes="Bold" />
+                    <CollectionView ItemsSource="{Binding Keywords}"
+                                    SelectionMode="None">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate>
+                                <Frame BackgroundColor="#21262d" BorderColor="#30363d"
+                                       CornerRadius="6" Padding="8,6" Margin="0,2"
+                                       HasShadow="False">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                        <Label Grid.Column="0"
+                                               Text="{Binding Value}"
+                                               TextColor="White" FontSize="14"
+                                               VerticalTextAlignment="Center"
+                                               LineBreakMode="TailTruncation" />
+                                        <Label Grid.Column="1"
+                                               Text="AGG"
+                                               TextColor="#da3633" FontSize="11"
+                                               FontAttributes="Bold"
+                                               VerticalTextAlignment="Center"
+                                               IsVisible="{Binding IsAggressive}" />
+                                        <Button Grid.Column="2" Text="X"
+                                                Clicked="OnRemoveKeywordClicked"
+                                                CommandParameter="{Binding .}"
+                                                BackgroundColor="#6e4017" TextColor="White"
+                                                FontSize="12" FontAttributes="Bold"
+                                                WidthRequest="36" HeightRequest="30"
+                                                CornerRadius="4" Padding="0" />
+                                    </Grid>
+                                </Frame>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.EmptyView>
+                            <Label Text="Keine Keywords. Fuege welche hinzu."
+                                   TextColor="#484f58" FontSize="13"
+                                   HorizontalTextAlignment="Center" Margin="0,8" />
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Status -->
+            <Label x:Name="LblStatus" Text="{Binding StatusText}"
+                   TextColor="#58a6ff" FontSize="13"
+                   HorizontalTextAlignment="Center" />
+
+            <!-- Bottom Spacer -->
+            <BoxView HeightRequest="20" Color="Transparent" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>
