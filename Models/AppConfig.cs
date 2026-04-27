@@ -18,5 +18,18 @@ public class AppConfig
 {
     public DateTime? EndTime { get; set; }
     public List<BlockedKeyword> Keywords { get; set; } = new();
+    public List<string> TargetApps { get; set; } = new() 
+    { 
+        "com.android.chrome", 
+        "org.mozilla.firefox", 
+        "com.zhiliaoapp.musically", 
+        "com.google.android.youtube",
+        "com.microsoft.emmx",
+        "com.opera.browser",
+        "com.brave.browser",
+        "com.duckduckgo.mobile.android",
+        "com.kiwibrowser.browser",
+        "com.yandex.browser"
+    };
     public bool IsIconHidden { get; set; }
 }

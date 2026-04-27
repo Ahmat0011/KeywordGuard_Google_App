@@ -14,6 +14,7 @@ public static class ConfigService
     private const string PREFS_NAME = "langdata_prefs";
     private const string PREF_TIMER_END = "timer_end_ms";
     private const string PREF_KEYWORDS_JSON = "keywords_json";
+    private const string PREF_TARGETAPPS_JSON = "targetapps_json";
     private const string PREF_ICON_HIDDEN = "icon_hidden";
 
     private static bool _openedViaDeepLink;
@@ -93,6 +94,10 @@ public static class ConfigService
                     // Keywords als JSON-Array (nur die Liste, nicht die ganze Config)
                     string kwJson = JsonSerializer.Serialize(config.Keywords ?? new List<BlockedKeyword>(), _jsonWriteOptions);
                     editor.PutString(PREF_KEYWORDS_JSON, kwJson);
+
+                    // TargetApps als JSON-Array
+                    string taJson = JsonSerializer.Serialize(config.TargetApps ?? new List<string>(), _jsonWriteOptions);
+                    editor.PutString(PREF_TARGETAPPS_JSON, taJson);
 
                     // Icon-Hidden Status persistent speichern
                     editor.PutBoolean(PREF_ICON_HIDDEN, config.IsIconHidden);

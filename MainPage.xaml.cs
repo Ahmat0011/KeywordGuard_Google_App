@@ -83,6 +83,19 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private void OnAddTargetAppClicked(object? sender, EventArgs e)
+    {
+        _vm.AddTargetApp();
+    }
+
+    private void OnRemoveTargetAppClicked(object? sender, EventArgs e)
+    {
+        if (sender is Button btn && btn.CommandParameter is string app)
+        {
+            _vm.RemoveTargetApp(app);
+        }
+    }
+
     private void OnClearAllClicked(object? sender, EventArgs e)
     {
         _vm.ClearAllKeywords();

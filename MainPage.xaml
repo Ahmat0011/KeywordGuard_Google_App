@@ -187,6 +187,70 @@
                 </VerticalStackLayout>
             </Frame>
 
+            <!-- Target Apps Input -->
+            <Frame BackgroundColor="#161b22" BorderColor="#30363d"
+                   CornerRadius="8" Padding="12" HasShadow="False"
+                   IsVisible="{Binding KeywordsVisible}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Ziel-Apps (Paketnamen)" FontSize="14"
+                           TextColor="#8b949e" FontAttributes="Bold" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry x:Name="EntryTargetApp" Grid.Column="0"
+                               Text="{Binding TargetAppInput}"
+                               Placeholder="z.B. com.whatsapp"
+                               PlaceholderColor="#484f58"
+                               BackgroundColor="#0d1117" TextColor="White"
+                               FontSize="15" />
+                        <Button Grid.Column="1" Text="+"
+                                Clicked="OnAddTargetAppClicked"
+                                BackgroundColor="#238636" TextColor="White"
+                                FontSize="18" FontAttributes="Bold"
+                                WidthRequest="48" HeightRequest="42"
+                                CornerRadius="6" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Target Apps List -->
+            <Frame BackgroundColor="#161b22" BorderColor="#30363d"
+                   CornerRadius="8" Padding="12" HasShadow="False"
+                   IsVisible="{Binding KeywordsVisible}">
+                <VerticalStackLayout Spacing="6">
+                    <Label Text="Überwachte Apps" FontSize="14"
+                           TextColor="#8b949e" FontAttributes="Bold" />
+                    <CollectionView ItemsSource="{Binding TargetApps}"
+                                    SelectionMode="None">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate>
+                                <Frame BackgroundColor="#21262d" BorderColor="#30363d"
+                                       CornerRadius="6" Padding="8,6" Margin="0,2"
+                                       HasShadow="False">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <Label Grid.Column="0"
+                                               Text="{Binding .}"
+                                               TextColor="White" FontSize="14"
+                                               VerticalTextAlignment="Center"
+                                               LineBreakMode="TailTruncation" />
+                                        <Button Grid.Column="1" Text="X"
+                                                Clicked="OnRemoveTargetAppClicked"
+                                                CommandParameter="{Binding .}"
+                                                BackgroundColor="#6e4017" TextColor="White"
+                                                FontSize="12" FontAttributes="Bold"
+                                                WidthRequest="36" HeightRequest="30"
+                                                CornerRadius="4" Padding="0" />
+                                    </Grid>
+                                </Frame>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.EmptyView>
+                            <Label Text="Keine Apps definiert."
+                                   TextColor="#484f58" FontSize="13"
+                                   HorizontalTextAlignment="Center" Margin="0,8" />
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+                </VerticalStackLayout>
+            </Frame>
+
             <!-- Status -->
             <Label x:Name="LblStatus" Text="{Binding StatusText}"
                    TextColor="#58a6ff" FontSize="13"

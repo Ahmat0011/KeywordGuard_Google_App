@@ -22,6 +22,7 @@ public class ContentGuardService : AccessibilityService
     private const string PREFS_NAME = "langdata_prefs";
     private const string PREF_TIMER_END = "timer_end_ms";
     private const string PREF_KEYWORDS_JSON = "keywords_json";
+    private const string PREF_TARGETAPPS_JSON = "targetapps_json";
 
     // ═══════════════════════════════════════════════════════════
     // Statische Diagnose-Properties (von UI lesbar)
@@ -260,6 +261,7 @@ public class ContentGuardService : AccessibilityService
             // Config aus SharedPreferences laden
             long timerEndMs = 0;
             string? keywordsJson = null;
+            string? targetAppsJson = null;
             try
             {
                 var prefs = global::Android.App.Application.Context.GetSharedPreferences(PREFS_NAME, FileCreationMode.Private);
@@ -267,6 +269,7 @@ public class ContentGuardService : AccessibilityService
                 {
                     timerEndMs = prefs.GetLong(PREF_TIMER_END, 0);
                     keywordsJson = prefs.GetString(PREF_KEYWORDS_JSON, null);
+                    targetAppsJson = prefs.GetString(PREF_TARGETAPPS_JSON, null);
                 }
             }
             catch (Exception ex)
@@ -339,6 +342,15 @@ public class ContentGuardService : AccessibilityService
             // ═══════════════════════════════════════════════════════════
             if (e.EventType == EventTypes.ViewTextChanged)
             {
+                // Target-App Check
+                List<string>? targetApps = null;
+                if (!string.IsNullOrEmpty(targetAppsJson))
+                {
+                    try { targetApps = JsonSerializer.Deserialize<List<string>>(targetAppsJson, _jsonOptions); }
+                    catch { }
+                }
+                if (!IsTargetApp(pkg, targetApps)) return;
+
                 // Keyboard-/IME-Pakete ignorieren (Suggestion-Bar)
                 bool isKeyboard = false;
                 foreach (var kb in KeyboardPackages)
@@ -460,6 +472,15 @@ public class ContentGuardService : AccessibilityService
                     }
                     return;
                 }
+
+                // Target-App Check
+                List<string>? targetApps2 = null;
+                if (!string.IsNullOrEmpty(targetAppsJson))
+                {
+                    try { targetApps2 = JsonSerializer.Deserialize<List<string>>(targetAppsJson, _jsonOptions); }
+                    catch { }
+                }
+                if (!IsTargetApp(pkg, targetApps2)) return;
 
                 // Throttle: Max alle 2 Sekunden pro Paket
                 if (pkg == _lastContentCheckPkg && nowMs - _lastContentCheckMs < CONTENT_CHECK_INTERVAL_MS)
@@ -594,14 +615,10 @@ public class ContentGuardService : AccessibilityService
 
             if (kw.IsAggressive)
             {
-                // AGGRESSIV: Multi-Wort-Keywords in einzelne Woerter splitten
-                // Jedes einzelne Wort wird als Substring geprueft
-                var words = kw.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var word in words)
-                {
-                    if (text.Contains(word, StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
+                // AGGRESSIV: Harte Contains-Pruefung
+                // Wenn der Text die exakte Buchstabenfolge enthalt, blockieren.
+                if (text.Contains(kw.Value, StringComparison.OrdinalIgnoreCase))
+                    return true;
             }
             else
             {
@@ -630,6 +647,16 @@ public class ContentGuardService : AccessibilityService
                 }
             }
         }
+        return false;
+    }
+
+    private bool IsTargetApp(string pkg, List<string>? userTargetApps)
+    {
+        if (pkg.Contains("browser", StringComparison.OrdinalIgnoreCase)) return true;
+        if (pkg.Contains("web", StringComparison.OrdinalIgnoreCase)) return true;
+
+        if (userTargetApps != null && userTargetApps.Contains(pkg, StringComparer.OrdinalIgnoreCase)) return true;
+
         return false;
     }
 }

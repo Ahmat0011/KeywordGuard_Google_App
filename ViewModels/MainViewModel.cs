@@ -9,6 +9,7 @@ namespace LanguageData.ViewModels;
 public class MainViewModel : INotifyPropertyChanged
 {
     private string _keywordInput = "";
+    private string _targetAppInput = "";
     private string _days = "0";
     private string _hours = "0";
     private string _minutes = "30";
@@ -26,9 +27,11 @@ public class MainViewModel : INotifyPropertyChanged
     private int _protectTapCount;
 
     public ObservableCollection<BlockedKeyword> Keywords { get; } = new();
+    public ObservableCollection<string> TargetApps { get; } = new();
 
     // Properties
     public string KeywordInput { get => _keywordInput; set { _keywordInput = value; OnPropertyChanged(); } }
+    public string TargetAppInput { get => _targetAppInput; set { _targetAppInput = value; OnPropertyChanged(); } }
     public bool IsAggressiveInput { get => _isAggressiveInput; set { _isAggressiveInput = value; OnPropertyChanged(); } }
     public string Days { get => _days; set { _days = value; OnPropertyChanged(); } }
     public string Hours { get => _hours; set { _hours = value; OnPropertyChanged(); } }
@@ -141,6 +144,45 @@ public class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CanClearAll));
     }
 
+    public void AddTargetApp()
+    {
+        if (string.IsNullOrWhiteSpace(TargetAppInput)) return;
+        string val = TargetAppInput.Trim();
+
+        var cfg = ConfigService.LoadConfig();
+        if (cfg.TargetApps.Any(t => t.Equals(val, StringComparison.OrdinalIgnoreCase)))
+        {
+            StatusText = "App existiert bereits!";
+            return;
+        }
+
+        cfg.TargetApps.Add(val);
+        ConfigService.SaveConfig(cfg);
+
+        if (KeywordsVisible)
+            TargetApps.Add(val);
+
+        TargetAppInput = "";
+        StatusText = IsTimerRunning ? "App hinzugefuegt (sofort aktiv!)" : "App hinzugefuegt.";
+    }
+
+    public void RemoveTargetApp(string item)
+    {
+        if (IsTimerRunning)
+        {
+            StatusText = "Loeschen waehrend Sperre nicht moeglich!";
+            return;
+        }
+
+        if (TargetApps.Contains(item))
+        {
+            TargetApps.Remove(item);
+            var cfg = ConfigService.LoadConfig();
+            cfg.TargetApps.RemoveAll(t => t == item);
+            ConfigService.SaveConfig(cfg);
+        }
+    }
+
     public void StartTimer()
     {
         int d = int.TryParse(Days, out int days) ? days : 0;
@@ -249,6 +291,7 @@ public class MainViewModel : INotifyPropertyChanged
     {
         KeywordsVisible = false;
         Keywords.Clear();
+        TargetApps.Clear();
         _protectTapCount = 0;
     }
 
@@ -263,6 +306,7 @@ public class MainViewModel : INotifyPropertyChanged
             {
                 KeywordsVisible = false;
                 Keywords.Clear();
+                TargetApps.Clear();
             }
             else
             {
@@ -270,6 +314,11 @@ public class MainViewModel : INotifyPropertyChanged
                 Keywords.Clear();
                 foreach (var kw in cfg.Keywords)
                     Keywords.Add(new BlockedKeyword { Value = kw.Value, IsAggressive = kw.IsAggressive });
+                
+                TargetApps.Clear();
+                foreach (var ta in cfg.TargetApps)
+                    TargetApps.Add(ta);
+
                 KeywordsVisible = true;
             }
         }
