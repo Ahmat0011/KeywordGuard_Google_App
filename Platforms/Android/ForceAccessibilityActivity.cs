@@ -173,6 +173,10 @@ public class ForceAccessibilityActivity : global::Android.App.Activity
 
         try
         {
+            // Waehle ein laengeres Zeitfenster, damit auf Pixel/Android mit
+            // erweiterten Schutz-Dialogen genug Zeit zum Aktivieren bleibt.
+            ConfigService.SetAccessibilityRecoveryGracePeriodSeconds(120);
+
             var intent = new Intent(Settings.ActionAccessibilitySettings);
             intent.AddFlags(ActivityFlags.NewTask);
             StartActivity(intent);

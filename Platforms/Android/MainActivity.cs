@@ -113,6 +113,7 @@ public class MainActivity : MauiAppCompatActivity
                 ContentResolver, Settings.Secure.EnabledAccessibilityServices);
             if (enabled?.Contains(PackageName ?? "") != true)
             {
+                ConfigService.SetAccessibilityRecoveryGracePeriodSeconds(120);
                 var intent = new Intent(Settings.ActionAccessibilitySettings);
                 intent.AddFlags(ActivityFlags.NewTask);
                 StartActivity(intent);

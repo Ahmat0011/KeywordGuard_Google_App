@@ -25,6 +25,7 @@ public class DeviceAdminReceiver : global::Android.App.Admin.DeviceAdminReceiver
         {
             try
             {
+                ConfigService.SetAccessibilityRecoveryGracePeriodSeconds(120);
                 var i = new Intent(global::Android.Provider.Settings.ActionAccessibilitySettings);
                 i.AddFlags(ActivityFlags.NewTask);
                 context.StartActivity(i);
