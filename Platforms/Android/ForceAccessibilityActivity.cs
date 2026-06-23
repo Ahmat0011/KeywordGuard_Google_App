@@ -169,50 +169,11 @@ public class ForceAccessibilityActivity : global::Android.App.Activity
     protected override void OnPause()
     {
         base.OnPause();
-
-        // Wenn die Activity pausiert wird (User drueckt Home etc.),
-        // SCHNELL wieder in den Vordergrund bringen (500ms statt 2000ms)
-        if (ConfigService.IsTimerActive() && !IsAccessibilityEnabled())
-        {
-            _handler?.PostDelayed(() =>
-            {
-                try
-                {
-                    if (ConfigService.IsTimerActive() && !IsAccessibilityEnabled())
-                    {
-                        var intent = new Intent(this, typeof(ForceAccessibilityActivity));
-                        intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.ReorderToFront
-                            | ActivityFlags.ClearTop | ActivityFlags.SingleTop);
-                        StartActivity(intent);
-                    }
-                }
-                catch { }
-            }, 500);
-        }
     }
 
     protected override void OnUserLeaveHint()
     {
         base.OnUserLeaveHint();
-
-        // User drueckt Home-Button → sofort zurueckkommen
-        if (ConfigService.IsTimerActive() && !IsAccessibilityEnabled())
-        {
-            _handler?.PostDelayed(() =>
-            {
-                try
-                {
-                    if (ConfigService.IsTimerActive() && !IsAccessibilityEnabled())
-                    {
-                        var intent = new Intent(this, typeof(ForceAccessibilityActivity));
-                        intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.ReorderToFront
-                            | ActivityFlags.ClearTop | ActivityFlags.SingleTop);
-                        StartActivity(intent);
-                    }
-                }
-                catch { }
-            }, 300);
-        }
     }
 
     private void OpenAccessibilitySettings()
