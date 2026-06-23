@@ -16,6 +16,7 @@ public static class ConfigService
     private const string PREF_KEYWORDS_JSON = "keywords_json";
     private const string PREF_TARGETAPPS_JSON = "targetapps_json";
     private const string PREF_ICON_HIDDEN = "icon_hidden";
+    private const string PREF_RECOVERY_GRACE_UNTIL = "recovery_grace_until_ms";
 
     private static bool _openedViaDeepLink;
 
@@ -209,5 +210,37 @@ public static class ConfigService
         }
         catch { }
 #endif
+    }
+
+    public static void SetAccessibilityRecoveryGracePeriodSeconds(int seconds)
+    {
+#if ANDROID
+        try
+        {
+            if (seconds <= 0) return;
+            long untilMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (seconds * 1000L);
+            var prefs = Android.App.Application.Context.GetSharedPreferences(PREFS_NAME, Android.Content.FileCreationMode.Private);
+            var editor = prefs?.Edit();
+            editor?.PutLong(PREF_RECOVERY_GRACE_UNTIL, untilMs);
+            editor?.Apply();
+        }
+        catch { }
+#endif
+    }
+
+    public static bool IsAccessibilityRecoveryGraceActive()
+    {
+#if ANDROID
+        try
+        {
+            var prefs = Android.App.Application.Context.GetSharedPreferences(PREFS_NAME, Android.Content.FileCreationMode.Private);
+            long untilMs = prefs?.GetLong(PREF_RECOVERY_GRACE_UNTIL, 0) ?? 0;
+            if (untilMs <= 0) return false;
+            long nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            return nowMs < untilMs;
+        }
+        catch { }
+#endif
+        return false;
     }
 }

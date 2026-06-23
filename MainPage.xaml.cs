@@ -1,4 +1,5 @@
 using LanguageData.Models;
+using LanguageData.Services;
 using LanguageData.ViewModels;
 
 namespace LanguageData;
@@ -111,6 +112,7 @@ public partial class MainPage : ContentPage
 #if ANDROID
         try
         {
+            ConfigService.SetAccessibilityRecoveryGracePeriodSeconds(120);
             var intent = new Android.Content.Intent(Android.Provider.Settings.ActionAccessibilitySettings);
             intent.AddFlags(Android.Content.ActivityFlags.NewTask);
             Platform.CurrentActivity?.StartActivity(intent);

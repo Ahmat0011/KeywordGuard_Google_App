@@ -54,6 +54,16 @@ public class ServiceRecoveryReceiver : BroadcastReceiver
 
             if (!serviceEnabled)
             {
+                // Grace-Phase: User ist vermutlich in den Accessibility-Einstellungen
+                // und braucht Zeit fuer Schutzdialoge (z.B. Pixel / erweiterter Schutz).
+                if (ConfigService.IsAccessibilityRecoveryGraceActive())
+                {
+                    global::Android.Util.Log.Info("LDService",
+                        "Recovery: grace active, skip force activity relaunch.");
+                    ContentGuardService.ScheduleRecoveryAlarm();
+                    return;
+                }
+
                 // Service NICHT aktiv + Timer aktiv → ForceAccessibilityActivity starten
                 global::Android.Util.Log.Warn("LDService",
                     "Recovery: Service disabled while timer active! Starting ForceAccessibilityActivity");

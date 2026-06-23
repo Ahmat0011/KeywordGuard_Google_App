@@ -50,6 +50,12 @@ public class BootHandler : BroadcastReceiver
 
             if (!serviceEnabled)
             {
+                if (ConfigService.IsAccessibilityRecoveryGraceActive())
+                {
+                    ContentGuardService.ScheduleRecoveryAlarm();
+                    return;
+                }
+
                 // Bedienungshilfe NICHT aktiv nach Neustart
                 // (Safe Mode, manuell deaktiviert, oder System-Reset)
                 // → Aggressiv: ForceAccessibilityActivity + Recovery-Alarm
