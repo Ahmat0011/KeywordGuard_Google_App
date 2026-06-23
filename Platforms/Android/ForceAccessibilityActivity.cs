@@ -166,16 +166,6 @@ public class ForceAccessibilityActivity : global::Android.App.Activity
         OpenAccessibilitySettings();
     }
 
-    protected override void OnPause()
-    {
-        base.OnPause();
-    }
-
-    protected override void OnUserLeaveHint()
-    {
-        base.OnUserLeaveHint();
-    }
-
     private void OpenAccessibilitySettings()
     {
         if (_redirecting) return;
