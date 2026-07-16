@@ -1,200 +1,80 @@
 using Android.App;
 using Android.Content;
 using Android.OS;
-using Android.Provider;
-using Android.Views;
-using LanguageData.Services;
+using Android.Widget;
+using LanguageData.Platforms.Android;
 
 namespace LanguageData.Platforms.Android;
 
-/// <summary>
-/// Fullscreen-Activity die den User ZWINGT, die Bedienungshilfe wieder zu aktivieren.
-/// Wird gestartet wenn der Service deaktiviert wird waehrend der Timer aktiv ist.
-/// Kann NICHT minimiert oder geschlossen werden (Override Back + Pause).
-/// Aggressives Re-Launch bei Pause (500ms) + automatische Weiterleitung (1s).
-/// </summary>
-[Activity(
-    Theme = "@android:style/Theme.NoTitleBar.Fullscreen",
-    LaunchMode = global::Android.Content.PM.LaunchMode.SingleTop,
-    Exported = false,
-    NoHistory = false,
-    ExcludeFromRecents = true)]
-public class ForceAccessibilityActivity : global::Android.App.Activity
+[Activity(Label = "Schutz aktivieren", Theme = "@style/Maui.SplashTheme", NoHistory = true)]
+public class ForceAccessibilityActivity : Activity
 {
-    private Handler? _handler;
-    private bool _redirecting;
+    private static int _redirectAttempts = 0;
+    private const int MAX_ATTEMPTS = 3;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
-
-        // Pruefen ob Timer ueberhaupt noch aktiv ist
-        if (!ConfigService.IsTimerActive())
-        {
-            ContentGuardService.CancelRecoveryAlarm();
-            Finish();
-            return;
-        }
-
-        // Pruefen ob Bedienungshilfe bereits aktiv (Race-Condition vermeiden)
-        if (IsAccessibilityEnabled())
-        {
-            ContentGuardService.CancelRecoveryAlarm();
-            Finish();
-            return;
-        }
-
-        // Window-Flags: Ueber Lockscreen anzeigen + Screen anlassen
-        try
-        {
-#pragma warning disable CA1416
-            if (Build.VERSION.SdkInt >= BuildVersionCodes.OMr1)
-            {
-                SetShowWhenLocked(true);
-                SetTurnScreenOn(true);
-            }
-            else
-            {
-                Window?.AddFlags(WindowManagerFlags.ShowWhenLocked | WindowManagerFlags.TurnScreenOn);
-            }
-#pragma warning restore CA1416
-            Window?.AddFlags(WindowManagerFlags.KeepScreenOn);
-            Window?.AddFlags(WindowManagerFlags.DismissKeyguard);
-        }
-        catch { }
-
-        // Einfaches Layout: Schwarzer Hintergrund mit Warnung
-        var layout = new global::Android.Widget.LinearLayout(this)
-        {
-            Orientation = global::Android.Widget.Orientation.Vertical
-        };
-        layout.SetGravity(GravityFlags.Center);
-        layout.SetBackgroundColor(global::Android.Graphics.Color.Black);
-        layout.SetPadding(60, 60, 60, 60);
-
-        var title = new global::Android.Widget.TextView(this)
-        {
-            Text = "\u26a0 BEDIENUNGSHILFE DEAKTIVIERT",
-            TextSize = 22,
-            Gravity = GravityFlags.Center
-        };
-        title.SetTextColor(global::Android.Graphics.Color.Red);
-        title.SetPadding(0, 0, 0, 40);
-
-        var msg = new global::Android.Widget.TextView(this)
-        {
-            Text = "Die Bedienungshilfe wurde deaktiviert.\n\n" +
-                   "Der Schutztimer ist noch aktiv.\n\n" +
-                   "Bitte aktiviere die Bedienungshilfe erneut,\n" +
-                   "um das Geraet normal nutzen zu koennen.\n\n" +
-                   "Du wirst automatisch weitergeleitet...",
-            TextSize = 16,
-            Gravity = GravityFlags.Center
-        };
-        msg.SetTextColor(global::Android.Graphics.Color.White);
-        msg.SetPadding(0, 0, 0, 60);
-
-        var btn = new global::Android.Widget.Button(this)
-        {
-            Text = "BEDIENUNGSHILFE AKTIVIEREN"
-        };
-        btn.SetTextColor(global::Android.Graphics.Color.White);
-        btn.SetBackgroundColor(global::Android.Graphics.Color.ParseColor("#238636"));
-        btn.Click += (s, e) => OpenAccessibilitySettings();
-
-        layout.AddView(title);
-        layout.AddView(msg);
-        layout.AddView(btn);
-        SetContentView(layout);
-
-        _handler = new Handler(Looper.MainLooper!);
-
-        // Automatische Weiterleitung nach 1 Sekunde (schneller als vorher)
-        _handler.PostDelayed(() => OpenAccessibilitySettings(), 1000);
-
-        // Periodischer Check alle 3 Sekunden: Falls User woanders navigiert,
-        // erneut zur Bedienungshilfe weiterleiten
-        SchedulePeriodicCheck();
-    }
-
-    private void SchedulePeriodicCheck()
-    {
-        _handler?.PostDelayed(() =>
-        {
-            try
-            {
-                if (ConfigService.IsTimerActive() && !IsAccessibilityEnabled())
-                {
-                    // Erneut weiterleiten wenn nicht auf Accessibility-Einstellungen
-                    OpenAccessibilitySettings();
-                    SchedulePeriodicCheck();
-                }
-                else if (!ConfigService.IsTimerActive() || IsAccessibilityEnabled())
-                {
-                    ContentGuardService.CancelRecoveryAlarm();
-                    Finish();
-                }
-            }
-            catch { }
-        }, 3000);
+        CheckAndRedirect();
     }
 
     protected override void OnResume()
     {
         base.OnResume();
+        CheckAndRedirect();
+    }
 
-        // Bei jedem Resume pruefen ob Service inzwischen aktiv
-        if (!ConfigService.IsTimerActive() || IsAccessibilityEnabled())
+    private void CheckAndRedirect()
+    {
+        if (ContentGuardService.IsServiceConnected)
         {
-            ContentGuardService.CancelRecoveryAlarm();
+            _redirectAttempts = 0; // Reset bei Erfolg
             Finish();
             return;
         }
 
-        // Sofort zur Bedienungshilfe weiterleiten bei Resume
-        _handler?.PostDelayed(() =>
+        if (_redirectAttempts >= MAX_ATTEMPTS)
         {
-            if (ConfigService.IsTimerActive() && !IsAccessibilityEnabled())
-                OpenAccessibilitySettings();
-        }, 500);
+            // Sicherheits-Bremse: Zeige Erklärung statt Endlosschleife
+            ShowBlockerExplanation();
+            return;
+        }
+
+        _redirectAttempts++;
+        try
+        {
+            var intent = new Intent(global::Android.Provider.Settings.ActionAccessibilitySettings);
+            intent.AddFlags(ActivityFlags.NewTask);
+            StartActivity(intent);
+            Toast.MakeText(this, $"Bitte aktiviere die Bedienungshilfe für 'Language Data' (Versuch {_redirectAttempts}/{MAX_ATTEMPTS})", ToastLength.Long)?.Show();
+        }
+        catch
+        {
+            Finish();
+        }
+    }
+
+    private void ShowBlockerExplanation()
+    {
+        var builder = new AlertDialog.Builder(this);
+        builder.SetTitle("Schutz blockiert");
+        builder.SetMessage("Der erweiterte Schutz von Android (Advanced Protection) blockiert aktuell die Aktivierung.\n\nBitte deaktiviere den erweiterten Schutz kurz in den Einstellungen, installiere die App neu und lasse 'Eingeschränkte Einstellungen' in den App-Infos zu.");
+        builder.SetCancelable(false);
+        builder.SetPositiveButton("Verstanden / Beenden", (s, e) =>
+        {
+            _redirectAttempts = 0; // Reset für den nächsten manuellen Start
+            Finish();
+        });
+        builder.Show();
     }
 
     public override void OnBackPressed()
     {
-        // BACK blockieren – User MUSS Bedienungshilfe aktivieren
-        // Stattdessen Einstellungen oeffnen
-        OpenAccessibilitySettings();
-    }
-
-    private void OpenAccessibilitySettings()
-    {
-        if (_redirecting) return;
-        _redirecting = true;
-
-        try
+        // Zurück-Taste während des Setups nur erlauben, wenn wir in der Sicherheits-Bremse sind
+        if (_redirectAttempts >= MAX_ATTEMPTS)
         {
-            // Waehle ein laengeres Zeitfenster, damit auf Pixel/Android mit
-            // erweiterten Schutz-Dialogen genug Zeit zum Aktivieren bleibt.
-            ConfigService.SetAccessibilityRecoveryGracePeriodSeconds(120);
-
-            var intent = new Intent(Settings.ActionAccessibilitySettings);
-            intent.AddFlags(ActivityFlags.NewTask);
-            StartActivity(intent);
+            _redirectAttempts = 0;
+            base.OnBackPressed();
         }
-        catch { }
-
-        // Redirecting-Flag nach 1.5 Sekunden zuruecksetzen (schneller)
-        _handler?.PostDelayed(() => _redirecting = false, 1500);
-    }
-
-    private bool IsAccessibilityEnabled()
-    {
-        try
-        {
-            var enabled = Settings.Secure.GetString(
-                ContentResolver, Settings.Secure.EnabledAccessibilityServices);
-            return enabled?.Contains(PackageName ?? "") == true;
-        }
-        catch { return false; }
     }
 }

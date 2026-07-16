@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Language Data</string>
-    <string name="accessibility_service_description">Systemdienst zur Sprachverarbeitung und Datenoptimierung</string>
+	<string name="app_name">Language Data</string>
+	<string name="accessibility_service_description">Unterstützt Nutzer beim sicheren Surfen durch Filtern unerwünschter Inhalte und Auslesen von Texten. Hilfreich für Fokus, Selbstschutz und kognitive Unterstützung im Alltag.</string>
 </resources>
