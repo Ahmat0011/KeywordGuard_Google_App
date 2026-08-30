@@ -82,6 +82,29 @@ public class ContentGuardService : AccessibilityService
         "cache loeschen", "clear cache"
     };
 
+    // Spezifische Signalwörter zur Blockierung des Pixel-Reparaturmodus
+    private static readonly string[] RepairModeKeywords =
+    {
+        "reparaturmodus",
+        "repair mode",
+        "in den reparaturmodus wechseln",
+        "reparaturmodus beenden"
+    };
+
+    // Spezifische Signalwörter zur Blockierung von Profil-/Nutzerwechsel & Gastkonten
+    private static readonly string[] UserManagementKeywords =
+    {
+        "nutzerwechsel zulassen",
+        "nutzer hinzufügen",
+        "gast hinzufügen",
+        "aktivitäten von gästen löschen",
+        "nutzer vom sperrbildschirm aus hinzufügen",
+        "multiple users",
+        "allow multiple users",
+        "add user",
+        "add guest"
+    };
+
     private static readonly string[] KeyboardPackages =
     {
         "inputmethod",
@@ -228,21 +251,16 @@ public class ContentGuardService : AccessibilityService
     }
 #pragma warning restore CA1416
 
-    /// <summary>
-    /// Prüft intelligent, ob eine App überwacht werden soll (mit smarter Browser-Erkennung & Fallback)
-    /// </summary>
     private bool IsTargetApp(string pkg, List<string>? userTargetApps)
     {
         if (string.IsNullOrEmpty(pkg)) return false;
 
-        // 1. Smarte automatische Erkennung (Browser & Web-Apps abfangen)
         if (pkg.Contains("browser", StringComparison.OrdinalIgnoreCase) ||
             pkg.Contains("web", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        // 2. Hardcodierter Fallback, falls die User-Liste im SharedPreferences absolut leer sein sollte
         var defaultApps = new List<string>
         {
             "com.android.chrome",
@@ -256,7 +274,6 @@ public class ContentGuardService : AccessibilityService
             return defaultApps.Contains(pkg, StringComparer.OrdinalIgnoreCase);
         }
 
-        // 3. Überprüfung der benutzerdefinierten Liste aus der App-UI
         return userTargetApps.Contains(pkg, StringComparer.OrdinalIgnoreCase);
     }
 
@@ -291,6 +308,9 @@ public class ContentGuardService : AccessibilityService
             bool timerActive = timerEndMs > 0 && nowMs < timerEndMs;
             if (!timerActive) return;
 
+            // ═══════════════════════════════════════════════════════════
+            // A) SYSTEM- UND EINSTELLUNGSSCHUTZ
+            // ═══════════════════════════════════════════════════════════
             if (e.EventType == EventTypes.WindowStateChanged)
             {
                 string cls = e.ClassName?.ToString() ?? "";
@@ -315,12 +335,33 @@ public class ContentGuardService : AccessibilityService
                     pkg.Contains("packageinstaller", StringComparison.OrdinalIgnoreCase))
                 {
                     var root = RootInActiveWindow;
-                    if (root != null && ContainsOwnAppReference(root))
+                    if (root != null)
                     {
-                        if (ContainsDangerousAction(root))
+                        // 1. App-Schutz (Deinstallation / Speicher leeren)
+                        if (ContainsOwnAppReference(root) && ContainsDangerousAction(root))
                         {
                             KeywordBlockCount++;
                             LastBlockInfo = $"Schutz: Aktion in {pkg}";
+                            PerformGlobalAction(GlobalAction.Back);
+                            PerformGlobalAction(GlobalAction.Home);
+                            return;
+                        }
+
+                        // 2. Pixel-Reparaturmodus-Schutz
+                        if (ContainsRepairMode(root))
+                        {
+                            KeywordBlockCount++;
+                            LastBlockInfo = $"Schutz: Reparaturmodus in {pkg}";
+                            PerformGlobalAction(GlobalAction.Back);
+                            PerformGlobalAction(GlobalAction.Home);
+                            return;
+                        }
+
+                        // 3. Mehrbenutzer- & Gastmodus-Schutz
+                        if (ContainsUserManagement(root))
+                        {
+                            KeywordBlockCount++;
+                            LastBlockInfo = $"Schutz: Nutzerverwaltung in {pkg}";
                             PerformGlobalAction(GlobalAction.Back);
                             PerformGlobalAction(GlobalAction.Home);
                             return;
@@ -330,6 +371,9 @@ public class ContentGuardService : AccessibilityService
                 return;
             }
 
+            // ═══════════════════════════════════════════════════════════
+            // B) KEYWORD-BLOCKIERUNG BEIM TIPPEN
+            // ═══════════════════════════════════════════════════════════
             if (e.EventType == EventTypes.ViewTextChanged)
             {
                 List<string>? targetApps = null;
@@ -338,7 +382,6 @@ public class ContentGuardService : AccessibilityService
                     try { targetApps = JsonSerializer.Deserialize<List<string>>(targetAppsJson, _jsonOptions); } catch { }
                 }
 
-                // FIX: Nutzt jetzt die smarte Methode – blockiert auch, wenn die Liste leer gelassen wurde!
                 if (!IsTargetApp(pkg, targetApps)) return;
 
                 bool isKeyboard = false;
@@ -400,6 +443,9 @@ public class ContentGuardService : AccessibilityService
                 return;
             }
 
+            // ═══════════════════════════════════════════════════════════
+            // C) KEYWORD-SCAN AUF DEM BILDSCHIRM
+            // ═══════════════════════════════════════════════════════════
             if (e.EventType == EventTypes.WindowContentChanged)
             {
                 bool isKb = false;
@@ -413,12 +459,34 @@ public class ContentGuardService : AccessibilityService
                     pkg.Contains("packageinstaller", StringComparison.OrdinalIgnoreCase))
                 {
                     var root = RootInActiveWindow;
-                    if (root != null && ContainsOwnAppReference(root) && ContainsDangerousAction(root))
+                    if (root != null)
                     {
-                        KeywordBlockCount++;
-                        LastBlockInfo = $"Schutz (WCC): {pkg}";
-                        PerformGlobalAction(GlobalAction.Back);
-                        PerformGlobalAction(GlobalAction.Home);
+                        if (ContainsOwnAppReference(root) && ContainsDangerousAction(root))
+                        {
+                            KeywordBlockCount++;
+                            LastBlockInfo = $"Schutz (WCC): {pkg}";
+                            PerformGlobalAction(GlobalAction.Back);
+                            PerformGlobalAction(GlobalAction.Home);
+                            return;
+                        }
+
+                        if (ContainsRepairMode(root))
+                        {
+                            KeywordBlockCount++;
+                            LastBlockInfo = $"Schutz (WCC Reparaturmodus): {pkg}";
+                            PerformGlobalAction(GlobalAction.Back);
+                            PerformGlobalAction(GlobalAction.Home);
+                            return;
+                        }
+
+                        if (ContainsUserManagement(root))
+                        {
+                            KeywordBlockCount++;
+                            LastBlockInfo = $"Schutz (WCC Nutzerverwaltung): {pkg}";
+                            PerformGlobalAction(GlobalAction.Back);
+                            PerformGlobalAction(GlobalAction.Home);
+                            return;
+                        }
                     }
                     return;
                 }
@@ -429,7 +497,6 @@ public class ContentGuardService : AccessibilityService
                     try { targetApps2 = JsonSerializer.Deserialize<List<string>>(targetAppsJson, _jsonOptions); } catch { }
                 }
 
-                // FIX: Auch beim Screen-Scan greift jetzt das unfehlbare Sicherheitsnetz
                 if (!IsTargetApp(pkg, targetApps2)) return;
 
                 if (pkg == _lastContentCheckPkg && nowMs - _lastContentCheckMs < CONTENT_CHECK_INTERVAL_MS) return;
@@ -489,6 +556,40 @@ public class ContentGuardService : AccessibilityService
         {
             var child = node.GetChild(i);
             if (child != null && ContainsDangerousAction(child)) return true;
+        }
+        return false;
+    }
+
+    private bool ContainsRepairMode(AccessibilityNodeInfo node)
+    {
+        if (node == null) return false;
+        string? text = node.Text?.ToString()?.ToLowerInvariant();
+        string? desc = node.ContentDescription?.ToString()?.ToLowerInvariant();
+
+        if (text != null) foreach (var kw in RepairModeKeywords) if (text.Contains(kw)) return true;
+        if (desc != null) foreach (var kw in RepairModeKeywords) if (desc.Contains(kw)) return true;
+
+        for (int i = 0; i < node.ChildCount; i++)
+        {
+            var child = node.GetChild(i);
+            if (child != null && ContainsRepairMode(child)) return true;
+        }
+        return false;
+    }
+
+    private bool ContainsUserManagement(AccessibilityNodeInfo node)
+    {
+        if (node == null) return false;
+        string? text = node.Text?.ToString()?.ToLowerInvariant();
+        string? desc = node.ContentDescription?.ToString()?.ToLowerInvariant();
+
+        if (text != null) foreach (var kw in UserManagementKeywords) if (text.Contains(kw)) return true;
+        if (desc != null) foreach (var kw in UserManagementKeywords) if (desc.Contains(kw)) return true;
+
+        for (int i = 0; i < node.ChildCount; i++)
+        {
+            var child = node.GetChild(i);
+            if (child != null && ContainsUserManagement(child)) return true;
         }
         return false;
     }
