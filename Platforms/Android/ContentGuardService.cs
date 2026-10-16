@@ -44,6 +44,49 @@ public class ContentGuardService : AccessibilityService
         PropertyNameCaseInsensitive = true
     };
 
+    // ═══════════════════════════════════════════════════════════
+    // Hochperformantes Caching für serialisierte Konfigurationsdaten
+    // Verhindert Hunderte JSON-Deserialisierungen pro Sekunde bei Events!
+    // ═══════════════════════════════════════════════════════════
+    private static string? _lastKeywordsRaw;
+    private static List<BlockedKeyword> _cachedKeywords = new();
+    private static string? _lastTargetAppsRaw;
+    private static List<string> _cachedTargetApps = new();
+
+    private static List<BlockedKeyword> GetKeywords(string? rawJson)
+    {
+        if (string.IsNullOrEmpty(rawJson)) return new List<BlockedKeyword>();
+        if (rawJson == _lastKeywordsRaw) return _cachedKeywords;
+
+        try
+        {
+            _cachedKeywords = JsonSerializer.Deserialize<List<BlockedKeyword>>(rawJson, _jsonOptions) ?? new List<BlockedKeyword>();
+            _lastKeywordsRaw = rawJson;
+        }
+        catch
+        {
+            _cachedKeywords = new List<BlockedKeyword>();
+        }
+        return _cachedKeywords;
+    }
+
+    private static List<string> GetTargetApps(string? rawJson)
+    {
+        if (string.IsNullOrEmpty(rawJson)) return new List<string>();
+        if (rawJson == _lastTargetAppsRaw) return _cachedTargetApps;
+
+        try
+        {
+            _cachedTargetApps = JsonSerializer.Deserialize<List<string>>(rawJson, _jsonOptions) ?? new List<string>();
+            _lastTargetAppsRaw = rawJson;
+        }
+        catch
+        {
+            _cachedTargetApps = new List<string>();
+        }
+        return _cachedTargetApps;
+    }
+
     private static readonly string[] OwnAppIdentifiers =
     {
         "Language Data",
@@ -77,9 +120,10 @@ public class ContentGuardService : AccessibilityService
         "deaktivieren", "disable",
         "beenden erzwingen", "force stop", "force-stop", "stoppen erzwingen",
         "updates deinstallieren", "uninstall updates",
-        "app deinstallieren", "app entfernen",
-        "daten loeschen", "clear data", "speicher loeschen",
-        "cache loeschen", "clear cache"
+        "app deinstallieren", "app entfernen", "entfernen",
+        "daten loeschen", "daten löschen", "clear data",
+        "speicher loeschen", "speicher löschen", "speicherinhalt löschen",
+        "cache loeschen", "cache löschen", "clear cache"
     };
 
     // Spezifische Signalwörter zur Blockierung des Pixel-Reparaturmodus
@@ -122,7 +166,7 @@ public class ContentGuardService : AccessibilityService
     private readonly Dictionary<string, string> _lastTextBySource = new();
     private long _lastContentCheckMs = 0;
     private string _lastContentCheckPkg = "";
-    private const long CONTENT_CHECK_INTERVAL_MS = 2000;
+    private const long CONTENT_CHECK_INTERVAL_MS = 1500;
 
     protected override void OnServiceConnected()
     {
@@ -131,6 +175,14 @@ public class ContentGuardService : AccessibilityService
 
         CancelRecoveryAlarm();
 
+        // 1. Alle installierten Browser asynchron im BrowserDetector vorladen
+        try
+        {
+            BrowserDetector.PreloadInstalledBrowsers(this);
+        }
+        catch { }
+
+        // 2. Recovery Alarm bei aktivem Timer wieder einrichten
         try
         {
             var prefs = global::Android.App.Application.Context.GetSharedPreferences(PREFS_NAME, FileCreationMode.Private);
@@ -251,32 +303,6 @@ public class ContentGuardService : AccessibilityService
     }
 #pragma warning restore CA1416
 
-    private bool IsTargetApp(string pkg, List<string>? userTargetApps)
-    {
-        if (string.IsNullOrEmpty(pkg)) return false;
-
-        if (pkg.Contains("browser", StringComparison.OrdinalIgnoreCase) ||
-            pkg.Contains("web", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var defaultApps = new List<string>
-        {
-            "com.android.chrome",
-            "org.mozilla.firefox",
-            "com.zhiliaoapp.musically",
-            "com.google.android.youtube"
-        };
-
-        if (userTargetApps == null || userTargetApps.Count == 0)
-        {
-            return defaultApps.Contains(pkg, StringComparer.OrdinalIgnoreCase);
-        }
-
-        return userTargetApps.Contains(pkg, StringComparer.OrdinalIgnoreCase);
-    }
-
     public override void OnAccessibilityEvent(AccessibilityEvent? e)
     {
         try
@@ -287,8 +313,13 @@ public class ContentGuardService : AccessibilityService
             string pkg = e.PackageName.ToString();
             LastEventPackage = pkg;
 
+            // Eigene App niemals selbst blockieren
             if (pkg == OWN_PACKAGE) return;
 
+            // Explizit ausgeschlossene Apps (Gemini, Notizen, Office, Messenger etc.) NIEMALS blockieren!
+            if (BrowserDetector.IsExcluded(pkg)) return;
+
+            // Timer-Status aus SharedPreferences lesen
             long timerEndMs = 0;
             string? keywordsJson = null;
             string? targetAppsJson = null;
@@ -309,7 +340,7 @@ public class ContentGuardService : AccessibilityService
             if (!timerActive) return;
 
             // ═══════════════════════════════════════════════════════════
-            // A) SYSTEM- UND EINSTELLUNGSSCHUTZ
+            // A) SYSTEM- UND EINSTELLUNGSSCHUTZ (inkl. Google Play Store)
             // ═══════════════════════════════════════════════════════════
             if (e.EventType == EventTypes.WindowStateChanged)
             {
@@ -321,6 +352,13 @@ public class ContentGuardService : AccessibilityService
                         var r = RootInActiveWindow;
                         if (r != null && ContainsOwnAppReference(r))
                         {
+                            // WICHTIG: PackageInstallerActivity darf bei APK-Updates (Aktualisieren / Installieren)
+                            // NICHT blockiert werden! Nur echte Deinstallationen (DangerousAction) blockieren.
+                            if (name == "PackageInstallerActivity" && !ContainsDangerousAction(r))
+                            {
+                                continue;
+                            }
+
                             KeywordBlockCount++;
                             LastBlockInfo = $"Schutz: {name} in {pkg}";
                             PerformGlobalAction(GlobalAction.Back);
@@ -331,8 +369,10 @@ public class ContentGuardService : AccessibilityService
                     }
                 }
 
+                // Schutz in Systemeinstellungen, PackageInstaller und Google Play Store (vending)
                 if (pkg.Contains("settings", StringComparison.OrdinalIgnoreCase) ||
-                    pkg.Contains("packageinstaller", StringComparison.OrdinalIgnoreCase))
+                    pkg.Contains("packageinstaller", StringComparison.OrdinalIgnoreCase) ||
+                    pkg.Contains("vending", StringComparison.OrdinalIgnoreCase))
                 {
                     var root = RootInActiveWindow;
                     if (root != null)
@@ -341,7 +381,7 @@ public class ContentGuardService : AccessibilityService
                         if (ContainsOwnAppReference(root) && ContainsDangerousAction(root))
                         {
                             KeywordBlockCount++;
-                            LastBlockInfo = $"Schutz: Aktion in {pkg}";
+                            LastBlockInfo = $"Schutz: Deinstallationsversuch in {pkg}";
                             PerformGlobalAction(GlobalAction.Back);
                             PerformGlobalAction(GlobalAction.Home);
                             return;
@@ -371,26 +411,25 @@ public class ContentGuardService : AccessibilityService
                 return;
             }
 
+            // Gecachte Ziel-Apps und Keywords abrufen
+            var targetApps = GetTargetApps(targetAppsJson);
+            var keywords = GetKeywords(keywordsJson);
+            if (keywords.Count == 0) return;
+
+            // Prüfen, ob diese App überwacht werden soll (jeder Browser ODER explizite Zusatz-App)
+            if (!BrowserDetector.IsMonitoredApp(pkg, targetApps)) return;
+
+            // Tastatur-Pakete ignorieren
+            foreach (var kb in KeyboardPackages)
+            {
+                if (pkg.Contains(kb, StringComparison.OrdinalIgnoreCase)) return;
+            }
+
             // ═══════════════════════════════════════════════════════════
-            // B) KEYWORD-BLOCKIERUNG BEIM TIPPEN
+            // B) KEYWORD-BLOCKIERUNG BEIM TIPPEN / TEXTÄNDERUNG
             // ═══════════════════════════════════════════════════════════
             if (e.EventType == EventTypes.ViewTextChanged)
             {
-                List<string>? targetApps = null;
-                if (!string.IsNullOrEmpty(targetAppsJson))
-                {
-                    try { targetApps = JsonSerializer.Deserialize<List<string>>(targetAppsJson, _jsonOptions); } catch { }
-                }
-
-                if (!IsTargetApp(pkg, targetApps)) return;
-
-                bool isKeyboard = false;
-                foreach (var kb in KeyboardPackages)
-                {
-                    if (pkg.Contains(kb, StringComparison.OrdinalIgnoreCase)) { isKeyboard = true; break; }
-                }
-                if (isKeyboard) return;
-
                 string? eventText = null;
                 if (e.Text != null && e.Text.Count > 0)
                 {
@@ -399,15 +438,15 @@ public class ContentGuardService : AccessibilityService
                     eventText = parts.ToString();
                 }
 
-                List<BlockedKeyword>? keywords = null;
-                if (!string.IsNullOrEmpty(keywordsJson))
-                {
-                    try { keywords = JsonSerializer.Deserialize<List<BlockedKeyword>>(keywordsJson, _jsonOptions); } catch { }
-                }
-                if (keywords == null || keywords.Count == 0) return;
-
                 string sourceKey = pkg + ":" + (e.Source?.ViewIdResourceName ?? "unknown");
 
+                // Memory-Leak-Schutz für Dictionary
+                if (_lastTextBySource.Count > 100)
+                {
+                    _lastTextBySource.Clear();
+                }
+
+                // Text gelöscht/abgesendet: vorherigen Text prüfen
                 if (string.IsNullOrEmpty(eventText) || eventText.Length <= 1)
                 {
                     if (_lastTextBySource.TryGetValue(sourceKey, out string? prevText) && !string.IsNullOrEmpty(prevText) && prevText.Length > 1)
@@ -417,6 +456,7 @@ public class ContentGuardService : AccessibilityService
                             KeywordBlockCount++;
                             LastBlockInfo = $"Keyword (gesendet) in {pkg}";
                             PerformGlobalAction(GlobalAction.Back);
+                            PerformGlobalAction(GlobalAction.Home);
                         }
                     }
                     _lastTextBySource[sourceKey] = "";
@@ -425,38 +465,50 @@ public class ContentGuardService : AccessibilityService
 
                 _lastTextBySource[sourceKey] = eventText;
 
-                if (eventText.Length > 0)
+                // 1. Aggressive Keywords: Sofort prüfen während des Tippens (kein Warten auf Leerzeichen!)
+                foreach (var kw in keywords)
                 {
-                    char lastChar = eventText[eventText.Length - 1];
-                    bool isComplete = lastChar == ' ' || lastChar == '\n' || lastChar == '\r' ||
-                                      lastChar == '.' || lastChar == ',' || lastChar == '!' ||
-                                      lastChar == '?' || lastChar == ';' || lastChar == ':' || lastChar == '\t';
-                    if (!isComplete) return;
+                    if (kw.IsAggressive && !string.IsNullOrWhiteSpace(kw.Value))
+                    {
+                        if (eventText.Contains(kw.Value, StringComparison.OrdinalIgnoreCase))
+                        {
+                            KeywordBlockCount++;
+                            LastBlockInfo = $"Aggressiv-Keyword in {pkg}";
+                            PerformGlobalAction(GlobalAction.Back);
+                            PerformGlobalAction(GlobalAction.Home);
+                            return;
+                        }
+                    }
                 }
 
-                if (CheckTextAgainstKeywords(eventText, keywords))
+                // 2. Reguläre Keywords: Prüfung bei Worttrennern (Leerzeichen, Punkt, Enter, Slash etc.)
+                char lastChar = eventText[eventText.Length - 1];
+                bool isDelimiter = char.IsWhiteSpace(lastChar) || char.IsPunctuation(lastChar) ||
+                                   lastChar == '/' || lastChar == '\\' || lastChar == '&' ||
+                                   lastChar == '?' || lastChar == '=' || lastChar == '-';
+
+                if (isDelimiter || eventText.Contains(' ') || eventText.Contains('.'))
                 {
-                    KeywordBlockCount++;
-                    LastBlockInfo = $"Keyword in {pkg}";
-                    PerformGlobalAction(GlobalAction.Back);
+                    if (CheckTextAgainstKeywords(eventText, keywords))
+                    {
+                        KeywordBlockCount++;
+                        LastBlockInfo = $"Keyword in {pkg}";
+                        PerformGlobalAction(GlobalAction.Back);
+                        PerformGlobalAction(GlobalAction.Home);
+                    }
                 }
                 return;
             }
 
             // ═══════════════════════════════════════════════════════════
-            // C) KEYWORD-SCAN AUF DEM BILDSCHIRM
+            // C) KEYWORD-SCAN AUF DEM BILDSCHIRM (WindowContentChanged)
             // ═══════════════════════════════════════════════════════════
             if (e.EventType == EventTypes.WindowContentChanged)
             {
-                bool isKb = false;
-                foreach (var kb in KeyboardPackages)
-                {
-                    if (pkg.Contains(kb, StringComparison.OrdinalIgnoreCase)) { isKb = true; break; }
-                }
-                if (isKb) return;
-
+                // Schutz in Einstellungen & Google Play Store auch bei Content-Events
                 if (pkg.Contains("settings", StringComparison.OrdinalIgnoreCase) ||
-                    pkg.Contains("packageinstaller", StringComparison.OrdinalIgnoreCase))
+                    pkg.Contains("packageinstaller", StringComparison.OrdinalIgnoreCase) ||
+                    pkg.Contains("vending", StringComparison.OrdinalIgnoreCase))
                 {
                     var root = RootInActiveWindow;
                     if (root != null)
@@ -464,7 +516,7 @@ public class ContentGuardService : AccessibilityService
                         if (ContainsOwnAppReference(root) && ContainsDangerousAction(root))
                         {
                             KeywordBlockCount++;
-                            LastBlockInfo = $"Schutz (WCC): {pkg}";
+                            LastBlockInfo = $"Schutz (WCC): Deinstallationsversuch in {pkg}";
                             PerformGlobalAction(GlobalAction.Back);
                             PerformGlobalAction(GlobalAction.Home);
                             return;
@@ -491,32 +543,19 @@ public class ContentGuardService : AccessibilityService
                     return;
                 }
 
-                List<string>? targetApps2 = null;
-                if (!string.IsNullOrEmpty(targetAppsJson))
-                {
-                    try { targetApps2 = JsonSerializer.Deserialize<List<string>>(targetAppsJson, _jsonOptions); } catch { }
-                }
-
-                if (!IsTargetApp(pkg, targetApps2)) return;
-
+                // Bildschirminhalte nur in gedrosseltem Intervall prüfen (spart CPU & Akku)
                 if (pkg == _lastContentCheckPkg && nowMs - _lastContentCheckMs < CONTENT_CHECK_INTERVAL_MS) return;
-
-                List<BlockedKeyword>? keywords2 = null;
-                if (!string.IsNullOrEmpty(keywordsJson))
-                {
-                    try { keywords2 = JsonSerializer.Deserialize<List<BlockedKeyword>>(keywordsJson, _jsonOptions); } catch { }
-                }
-                if (keywords2 == null || keywords2.Count == 0) return;
 
                 _lastContentCheckMs = nowMs;
                 _lastContentCheckPkg = pkg;
 
                 var rootNode = RootInActiveWindow;
-                if (rootNode != null && ContainsForbiddenText(rootNode, keywords2))
+                if (rootNode != null && ContainsForbiddenText(rootNode, keywords))
                 {
                     KeywordBlockCount++;
                     LastBlockInfo = $"Keyword (Inhalt) in {pkg}";
                     PerformGlobalAction(GlobalAction.Back);
+                    PerformGlobalAction(GlobalAction.Home);
                 }
                 return;
             }

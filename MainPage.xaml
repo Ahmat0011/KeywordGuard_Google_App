@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:LanguageData.ViewModels"
+             xmlns:models="clr-namespace:LanguageData.Models"
+             xmlns:services="clr-namespace:LanguageData.Services"
              x:Class="LanguageData.MainPage"
+             x:DataType="vm:MainViewModel"
              BackgroundColor="#0d1117"
              Shell.NavBarIsVisible="False">
 
@@ -151,11 +155,11 @@
                     <CollectionView ItemsSource="{Binding Keywords}"
                                     SelectionMode="None">
                         <CollectionView.ItemTemplate>
-                            <DataTemplate>
+                            <DataTemplate x:DataType="models:BlockedKeyword">
                                 <Frame BackgroundColor="#21262d" BorderColor="#30363d"
                                        CornerRadius="6" Padding="8,6" Margin="0,2"
                                        HasShadow="False">
-                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                     <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                                         <Label Grid.Column="0"
                                                Text="{Binding Value}"
                                                TextColor="White" FontSize="14"
@@ -187,27 +191,105 @@
                 </VerticalStackLayout>
             </Frame>
 
-            <!-- Target Apps Input -->
+            <!-- Target Apps Section -->
             <Frame BackgroundColor="#161b22" BorderColor="#30363d"
                    CornerRadius="8" Padding="12" HasShadow="False"
                    IsVisible="{Binding KeywordsVisible}">
-                <VerticalStackLayout Spacing="8">
-                    <Label Text="Ziel-Apps (Paketnamen)" FontSize="14"
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Zusätzliche Apps überwachen" FontSize="14"
                            TextColor="#8b949e" FontAttributes="Bold" />
+                    <Label Text="🌐 Alle Webbrowser werden automatisch überwacht. Hier kannst du per Klick oder Textfeld weitere Apps hinzufügen (z.B. YouTube)."
+                           FontSize="11" TextColor="#58a6ff" />
+
+                    <!-- Klick-Auswahl Button -->
+                    <Button Text="📱 Installierte Apps auswählen (Klick-Auswahl)"
+                            Clicked="OnToggleAppPickerClicked"
+                            BackgroundColor="#1f6feb" TextColor="White"
+                            FontSize="13" FontAttributes="Bold"
+                            CornerRadius="6" HeightRequest="40" />
+
+                    <!-- Manuelle Eingabe per Paketname -->
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                         <Entry x:Name="EntryTargetApp" Grid.Column="0"
                                Text="{Binding TargetAppInput}"
-                               Placeholder="z.B. com.whatsapp"
+                               Placeholder="z.B. com.google.android.youtube"
                                PlaceholderColor="#484f58"
                                BackgroundColor="#0d1117" TextColor="White"
-                               FontSize="15" />
+                               FontSize="14" />
                         <Button Grid.Column="1" Text="+"
                                 Clicked="OnAddTargetAppClicked"
                                 BackgroundColor="#238636" TextColor="White"
                                 FontSize="18" FontAttributes="Bold"
-                                WidthRequest="48" HeightRequest="42"
+                                WidthRequest="48" HeightRequest="40"
                                 CornerRadius="6" />
                     </Grid>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- App Picker View (Auswahl aus allen installierten Apps) -->
+            <Frame BackgroundColor="#161b22" BorderColor="#1f6feb"
+                   CornerRadius="8" Padding="12" HasShadow="False"
+                   IsVisible="{Binding IsAppPickerVisible}">
+                <VerticalStackLayout Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Grid.Column="0" Text="App-Auswahl (Klick zum Schützen)" FontSize="14"
+                               TextColor="#58a6ff" FontAttributes="Bold" VerticalTextAlignment="Center" />
+                        <ActivityIndicator Grid.Column="1" IsRunning="{Binding IsLoadingApps}"
+                                           Color="#58a6ff" WidthRequest="20" HeightRequest="20" />
+                    </Grid>
+
+                    <Entry Placeholder="App suchen (z.B. YouTube, TikTok, Chrome)..."
+                           Text="{Binding AppSearchFilter}"
+                           PlaceholderColor="#484f58"
+                           BackgroundColor="#0d1117" TextColor="White"
+                           FontSize="14" />
+
+                    <CollectionView ItemsSource="{Binding InstalledApps}"
+                                    SelectionMode="None"
+                                    HeightRequest="280">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="services:AppItemModel">
+                                <Frame BackgroundColor="#21262d" BorderColor="#30363d"
+                                       CornerRadius="6" Padding="8,6" Margin="0,2"
+                                       HasShadow="False">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <VerticalStackLayout Grid.Column="0" Spacing="2">
+                                            <HorizontalStackLayout Spacing="6">
+                                                <Label Text="{Binding AppName}"
+                                                       TextColor="White" FontSize="13"
+                                                       FontAttributes="Bold"
+                                                       LineBreakMode="TailTruncation" />
+                                                <Frame BackgroundColor="{Binding BadgeColor}"
+                                                       CornerRadius="4" Padding="4,1" HasShadow="False"
+                                                       IsVisible="{Binding HasBadge}">
+                                                    <Label Text="{Binding BadgeText}"
+                                                           TextColor="White" FontSize="9"
+                                                           FontAttributes="Bold" />
+                                                </Frame>
+                                            </HorizontalStackLayout>
+                                            <Label Text="{Binding PackageName}"
+                                                   TextColor="#8b949e" FontSize="10"
+                                                   LineBreakMode="TailTruncation" />
+                                        </VerticalStackLayout>
+
+                                        <Button Grid.Column="1"
+                                                Text="{Binding ActionText}"
+                                                BackgroundColor="{Binding ActionButtonColor}"
+                                                IsEnabled="{Binding IsActionButtonEnabled}"
+                                                Clicked="OnAppItemClicked"
+                                                CommandParameter="{Binding .}"
+                                                TextColor="White" FontSize="11" FontAttributes="Bold"
+                                                HeightRequest="32" Padding="8,0" CornerRadius="4" />
+                                    </Grid>
+                                </Frame>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.EmptyView>
+                            <Label Text="Keine Apps gefunden."
+                                   TextColor="#484f58" FontSize="13"
+                                   HorizontalTextAlignment="Center" Margin="0,16" />
+                        </CollectionView.EmptyView>
+                    </CollectionView>
                 </VerticalStackLayout>
             </Frame>
 
@@ -216,12 +298,12 @@
                    CornerRadius="8" Padding="12" HasShadow="False"
                    IsVisible="{Binding KeywordsVisible}">
                 <VerticalStackLayout Spacing="6">
-                    <Label Text="Überwachte Apps" FontSize="14"
+                    <Label Text="Überwachte Zusatz-Apps" FontSize="14"
                            TextColor="#8b949e" FontAttributes="Bold" />
                     <CollectionView ItemsSource="{Binding TargetApps}"
                                     SelectionMode="None">
                         <CollectionView.ItemTemplate>
-                            <DataTemplate>
+                            <DataTemplate x:DataType="x:String">
                                 <Frame BackgroundColor="#21262d" BorderColor="#30363d"
                                        CornerRadius="6" Padding="8,6" Margin="0,2"
                                        HasShadow="False">
@@ -243,7 +325,7 @@
                             </DataTemplate>
                         </CollectionView.ItemTemplate>
                         <CollectionView.EmptyView>
-                            <Label Text="Keine Apps definiert."
+                            <Label Text="Keine zusätzlichen Apps definiert."
                                    TextColor="#484f58" FontSize="13"
                                    HorizontalTextAlignment="Center" Margin="0,8" />
                         </CollectionView.EmptyView>

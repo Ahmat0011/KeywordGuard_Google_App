@@ -132,4 +132,17 @@ public partial class MainPage : ContentPage
         catch { }
 #endif
     }
+
+    private async void OnToggleAppPickerClicked(object? sender, EventArgs e)
+    {
+        await _vm.ToggleAppPickerAsync();
+    }
+
+    private void OnAppItemClicked(object? sender, EventArgs e)
+    {
+        if (sender is Button btn && btn.CommandParameter is AppItemModel item)
+        {
+            _vm.ToggleAppItem(item);
+        }
+    }
 }

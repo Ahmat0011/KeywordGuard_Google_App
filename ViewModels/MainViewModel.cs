@@ -26,8 +26,15 @@ public class MainViewModel : INotifyPropertyChanged
     private DateTime? _endTime;
     private int _protectTapCount;
 
+    // App-Picker Properties
+    private bool _isAppPickerVisible;
+    private string _appSearchFilter = "";
+    private bool _isLoadingApps;
+    private List<AppItemModel> _allInstalledApps = new();
+
     public ObservableCollection<BlockedKeyword> Keywords { get; } = new();
     public ObservableCollection<string> TargetApps { get; } = new();
+    public ObservableCollection<AppItemModel> InstalledApps { get; } = new();
 
     // Properties
     public string KeywordInput { get => _keywordInput; set { _keywordInput = value; OnPropertyChanged(); } }
@@ -40,6 +47,32 @@ public class MainViewModel : INotifyPropertyChanged
     public string CountdownText { get => _countdownText; set { _countdownText = value; OnPropertyChanged(); } }
     public string ServiceStatusText { get => _serviceStatusText; set { _serviceStatusText = value; OnPropertyChanged(); } }
     public string ServiceStatusColor { get => _serviceStatusColor; set { _serviceStatusColor = value; OnPropertyChanged(); } }
+
+    public bool IsAppPickerVisible
+    {
+        get => _isAppPickerVisible;
+        set { _isAppPickerVisible = value; OnPropertyChanged(); }
+    }
+
+    public bool IsLoadingApps
+    {
+        get => _isLoadingApps;
+        set { _isLoadingApps = value; OnPropertyChanged(); }
+    }
+
+    public string AppSearchFilter
+    {
+        get => _appSearchFilter;
+        set
+        {
+            if (_appSearchFilter != value)
+            {
+                _appSearchFilter = value;
+                OnPropertyChanged();
+                FilterInstalledApps();
+            }
+        }
+    }
 
     public bool IsTimerRunning
     {
@@ -162,6 +195,15 @@ public class MainViewModel : INotifyPropertyChanged
         if (KeywordsVisible)
             TargetApps.Add(val);
 
+        // Im App-Picker ebenfalls synchronisieren
+        var appItem = _allInstalledApps.FirstOrDefault(a => a.PackageName.Equals(val, StringComparison.OrdinalIgnoreCase));
+        if (appItem != null)
+        {
+            appItem.IsSelected = true;
+            appItem.BadgeText = "Überwacht";
+            appItem.BadgeColor = "#da3633";
+        }
+
         TargetAppInput = "";
         StatusText = IsTimerRunning ? "App hinzugefuegt (sofort aktiv!)" : "App hinzugefuegt.";
     }
@@ -178,8 +220,110 @@ public class MainViewModel : INotifyPropertyChanged
         {
             TargetApps.Remove(item);
             var cfg = ConfigService.LoadConfig();
-            cfg.TargetApps.RemoveAll(t => t == item);
+            cfg.TargetApps.RemoveAll(t => t.Equals(item, StringComparison.OrdinalIgnoreCase));
             ConfigService.SaveConfig(cfg);
+
+            // Im App-Picker ebenfalls synchronisieren
+            var appItem = _allInstalledApps.FirstOrDefault(a => a.PackageName.Equals(item, StringComparison.OrdinalIgnoreCase));
+            if (appItem != null)
+            {
+                appItem.IsSelected = false;
+                appItem.BadgeText = appItem.IsSafeExcluded ? "Sicher (KI/Notiz)" : "";
+                appItem.BadgeColor = appItem.IsSafeExcluded ? "#3fb950" : "#8b949e";
+            }
+
+            StatusText = "App entfernt.";
+        }
+    }
+
+    public async Task ToggleAppPickerAsync()
+    {
+        IsAppPickerVisible = !IsAppPickerVisible;
+        if (IsAppPickerVisible && _allInstalledApps.Count == 0)
+        {
+            await LoadInstalledAppsAsync();
+        }
+    }
+
+    public async Task LoadInstalledAppsAsync()
+    {
+        IsLoadingApps = true;
+        try
+        {
+            var cfg = ConfigService.LoadConfig();
+            var apps = await AppListService.GetInstalledAppsAsync(cfg.TargetApps);
+            _allInstalledApps = apps;
+            FilterInstalledApps();
+        }
+        finally
+        {
+            IsLoadingApps = false;
+        }
+    }
+
+    private void FilterInstalledApps()
+    {
+        InstalledApps.Clear();
+        string q = _appSearchFilter?.Trim() ?? "";
+
+        var filtered = string.IsNullOrEmpty(q)
+            ? _allInstalledApps
+            : _allInstalledApps.Where(a =>
+                a.AppName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                a.PackageName.Contains(q, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var app in filtered)
+        {
+            InstalledApps.Add(app);
+        }
+    }
+
+    public void ToggleAppItem(AppItemModel item)
+    {
+        if (item.IsBrowser)
+        {
+            StatusText = "Webbrowser werden bereits automatisch lückenlos geschützt!";
+            return;
+        }
+
+        if (item.IsSelected)
+        {
+            // Abwählen / Entfernen
+            if (IsTimerRunning)
+            {
+                StatusText = "Loeschen waehrend Sperre nicht moeglich!";
+                return;
+            }
+
+            var cfg = ConfigService.LoadConfig();
+            cfg.TargetApps.RemoveAll(t => t.Equals(item.PackageName, StringComparison.OrdinalIgnoreCase));
+            ConfigService.SaveConfig(cfg);
+
+            TargetApps.Remove(item.PackageName);
+            item.IsSelected = false;
+            item.BadgeText = item.IsSafeExcluded ? "Sicher (KI/Notiz)" : "";
+            item.BadgeColor = item.IsSafeExcluded ? "#3fb950" : "#8b949e";
+
+            StatusText = $"{item.AppName} entfernt.";
+        }
+        else
+        {
+            // Auswählen / Hinzufügen
+            var cfg = ConfigService.LoadConfig();
+            if (!cfg.TargetApps.Any(t => t.Equals(item.PackageName, StringComparison.OrdinalIgnoreCase)))
+            {
+                cfg.TargetApps.Add(item.PackageName);
+                ConfigService.SaveConfig(cfg);
+            }
+
+            if (!TargetApps.Contains(item.PackageName))
+                TargetApps.Add(item.PackageName);
+
+            item.IsSelected = true;
+            item.BadgeText = "Überwacht";
+            item.BadgeColor = "#da3633";
+
+            StatusText = IsTimerRunning ? $"{item.AppName} hinzugefügt (sofort aktiv!)" : $"{item.AppName} hinzugefügt.";
         }
     }
 
@@ -211,6 +355,7 @@ public class MainViewModel : INotifyPropertyChanged
         IsProtected = true;
         IsTrapActive = true;
         KeywordsVisible = false;
+        IsAppPickerVisible = false;
         ServiceStatusText = "";
         ServiceStatusColor = "#0d1117";
         StatusText = "";
@@ -263,6 +408,7 @@ public class MainViewModel : INotifyPropertyChanged
         IsProtected = true;
         IsTrapActive = false;
         KeywordsVisible = false;
+        IsAppPickerVisible = false;
         _protectTapCount = 0;
         _endTime = null;
 
@@ -290,8 +436,10 @@ public class MainViewModel : INotifyPropertyChanged
     public void HideKeywords()
     {
         KeywordsVisible = false;
+        IsAppPickerVisible = false;
         Keywords.Clear();
         TargetApps.Clear();
+        InstalledApps.Clear();
         _protectTapCount = 0;
     }
 
@@ -305,8 +453,10 @@ public class MainViewModel : INotifyPropertyChanged
             if (KeywordsVisible)
             {
                 KeywordsVisible = false;
+                IsAppPickerVisible = false;
                 Keywords.Clear();
                 TargetApps.Clear();
+                InstalledApps.Clear();
             }
             else
             {
