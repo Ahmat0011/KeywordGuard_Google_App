@@ -46,9 +46,6 @@ public partial class MainPage : ContentPage
         _vm.StartTimer();
 
 #if ANDROID
-        // App SOFORT schliessen nach Timer-Start
-        // Erst zum Homescreen navigieren, dann Activity beenden
-        // So landet der User NICHT in App-Info
         MainThread.BeginInvokeOnMainThread(() =>
         {
             try
@@ -56,13 +53,11 @@ public partial class MainPage : ContentPage
                 var activity = Platform.CurrentActivity;
                 if (activity != null)
                 {
-                    // Zum Homescreen navigieren BEVOR die Activity beendet wird
                     var homeIntent = new Android.Content.Intent(Android.Content.Intent.ActionMain);
                     homeIntent.AddCategory(Android.Content.Intent.CategoryHome);
                     homeIntent.AddFlags(Android.Content.ActivityFlags.NewTask);
                     activity.StartActivity(homeIntent);
 
-                    // Activity sofort beenden
                     activity.FinishAndRemoveTask();
                 }
             }
@@ -112,7 +107,12 @@ public partial class MainPage : ContentPage
 #if ANDROID
         try
         {
-            ConfigService.SetAccessibilityRecoveryGracePeriodSeconds(120);
+            // Grace-Period NUR setzen, wenn der Service noch gar nicht verbunden ist!
+            if (!LanguageData.Platforms.Android.ContentGuardService.IsServiceConnected)
+            {
+                ConfigService.SetAccessibilityRecoveryGracePeriodSeconds(120);
+            }
+
             var intent = new Android.Content.Intent(Android.Provider.Settings.ActionAccessibilitySettings);
             intent.AddFlags(Android.Content.ActivityFlags.NewTask);
             Platform.CurrentActivity?.StartActivity(intent);
@@ -126,7 +126,6 @@ public partial class MainPage : ContentPage
 #if ANDROID
         try
         {
-            // MainActivity ist im Namespace LanguageData, nicht Platforms.Android
             MainActivity.RequestDeviceAdmin();
         }
         catch { }

@@ -5,17 +5,12 @@ using LanguageData.Services;
 
 namespace LanguageData.Platforms.Android;
 
-/// <summary>
-/// BroadcastReceiver der vom AlarmManager getriggert wird.
-/// Prueft ob die Bedienungshilfe deaktiviert wurde waehrend der Timer aktiv ist.
-/// Wenn ja → startet ForceAccessibilityActivity (Fullscreen-Zwang).
-/// Wenn Timer abgelaufen → bricht den Alarm ab.
-///
-/// KETTEN-ALARM: Plant sich selbst erneut (alle 5 Sekunden) solange
-/// Timer aktiv UND Service nicht laeuft. Dadurch haeufigeres Pruefen
-/// als mit setRepeating (min 60s) moeglich.
-/// </summary>
-[BroadcastReceiver(Enabled = true, Exported = false)]
+[BroadcastReceiver(Enabled = true, Exported = true)]
+[IntentFilter(new[] {
+    Intent.ActionMyPackageReplaced,
+    Intent.ActionBootCompleted,
+    "android.intent.action.QUICKBOOT_POWERON"
+})]
 public class ServiceRecoveryReceiver : BroadcastReceiver
 {
     public override void OnReceive(Context? context, Intent? intent)
@@ -33,13 +28,34 @@ public class ServiceRecoveryReceiver : BroadcastReceiver
             }
             catch { }
 
+            // Deinstallationsschutz auf Systemebene (falls Device Owner) sofort nach Update/Boot erneuern
+            DeviceAdminReceiver.EnforceUninstallProtection(context);
+
+            // Browser-Cache nach App-Update direkt vorladen
+            if (intent?.Action == Intent.ActionMyPackageReplaced)
+            {
+                try { BrowserDetector.PreloadInstalledBrowsers(context); } catch { }
+            }
+
             // Timer noch aktiv?
             if (!ConfigService.IsTimerActive())
             {
-                // Timer abgelaufen → Alarm abbrechen, Icon wiederherstellen
+                // Timer abgelaufen -> Alarm abbrechen, Icon wiederherstellen
                 ContentGuardService.CancelRecoveryAlarm();
                 try { MainActivity.SetAppIconVisible(true); } catch { }
                 return;
+            }
+
+            // Wenn der Timer aktiv ist und die App über Visual Studio aktualisiert wurde,
+            // bleibt das App-Icon weiterhin versteckt
+            if (intent?.Action == Intent.ActionMyPackageReplaced)
+            {
+                try
+                {
+                    MainActivity.SetAppIconVisible(false);
+                    ConfigService.SetIconHidden(true);
+                }
+                catch { }
             }
 
             // Bedienungshilfe aktiv?
@@ -54,8 +70,6 @@ public class ServiceRecoveryReceiver : BroadcastReceiver
 
             if (!serviceEnabled)
             {
-                // Grace-Phase: User ist vermutlich in den Accessibility-Einstellungen
-                // und braucht Zeit fuer Schutzdialoge (z.B. Pixel / erweiterter Schutz).
                 if (ConfigService.IsAccessibilityRecoveryGraceActive())
                 {
                     global::Android.Util.Log.Info("LDService",
@@ -64,7 +78,6 @@ public class ServiceRecoveryReceiver : BroadcastReceiver
                     return;
                 }
 
-                // Service NICHT aktiv + Timer aktiv → ForceAccessibilityActivity starten
                 global::Android.Util.Log.Warn("LDService",
                     "Recovery: Service disabled while timer active! Starting ForceAccessibilityActivity");
 
@@ -72,13 +85,10 @@ public class ServiceRecoveryReceiver : BroadcastReceiver
                 activityIntent.AddFlags(ActivityFlags.NewTask | ActivityFlags.ClearTop);
                 context.StartActivity(activityIntent);
 
-                // KETTEN-ALARM: Erneut in 5 Sekunden pruefen
-                // (da setExactAndAllowWhileIdle nur einmalig feuert)
                 ContentGuardService.ScheduleRecoveryAlarm();
             }
             else
             {
-                // Service laeuft wieder → Alarm abbrechen
                 ContentGuardService.CancelRecoveryAlarm();
             }
         }
@@ -86,7 +96,6 @@ public class ServiceRecoveryReceiver : BroadcastReceiver
         {
             global::Android.Util.Log.Error("LDService", $"Recovery receiver error: {ex.Message}");
 
-            // Bei Fehler trotzdem Ketten-Alarm planen (Sicherheit)
             try
             {
                 if (ConfigService.IsTimerActive())
