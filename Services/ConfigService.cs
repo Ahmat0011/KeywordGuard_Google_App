@@ -1,22 +1,19 @@
+#pragma warning disable CA1416, CA1422
 using System.Text.Json;
 using LanguageData.Models;
 
 namespace LanguageData.Services;
 
-/// <summary>
-/// Zentrale Konfigurationsverwaltung.
-/// Triple-Storage: AES-256 (UI) + JSON-Sync + SharedPreferences (Service).
-/// </summary>
 public static class ConfigService
 {
     private const string JSON_FILE = "langdata_config.json";
     private const string LOG_TAG = "LDService";
-    private const string PREFS_NAME = "langdata_prefs";
-    private const string PREF_TIMER_END = "timer_end_ms";
-    private const string PREF_KEYWORDS_JSON = "keywords_json";
-    private const string PREF_TARGETAPPS_JSON = "targetapps_json";
-    private const string PREF_ICON_HIDDEN = "icon_hidden";
-    private const string PREF_RECOVERY_GRACE_UNTIL = "recovery_grace_until_ms";
+    public const string PREFS_NAME = "langdata_prefs";
+    public const string PREF_TIMER_END = "timer_end_ms";
+    public const string PREF_KEYWORDS_JSON = "keywords_json";
+    public const string PREF_TARGETAPPS_JSON = "targetapps_json";
+    public const string PREF_ICON_HIDDEN = "icon_hidden";
+    public const string PREF_RECOVERY_GRACE_UNTIL = "recovery_grace_until_ms";
 
     private static bool _openedViaDeepLink;
 
@@ -30,16 +27,8 @@ public static class ConfigService
         WriteIndented = false
     };
 
-    // ═══════════════════════════════════════════════════════════
-    // Deep Link Flag
-    // ═══════════════════════════════════════════════════════════
-
     public static void SetDeepLinkOpened(bool value) => _openedViaDeepLink = value;
     public static bool WasOpenedViaDeepLink() => _openedViaDeepLink;
-
-    // ═══════════════════════════════════════════════════════════
-    // Config Pfad
-    // ═══════════════════════════════════════════════════════════
 
     public static string GetJsonPath()
     {
@@ -56,24 +45,17 @@ public static class ConfigService
         return Path.Combine(appData, JSON_FILE);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // Speichern (Verschluesselt + JSON + SharedPreferences)
-    // ═══════════════════════════════════════════════════════════
-
     public static void SaveConfig(AppConfig config)
     {
         try
         {
             string json = JsonSerializer.Serialize(config, _jsonWriteOptions);
 
-            // 1. Verschluesselt speichern
             CryptoHelper.SaveEncrypted(json);
 
-            // 2. JSON-Sync
             string jsonPath = GetJsonPath();
             File.WriteAllText(jsonPath, json);
 
-            // 3. SharedPreferences (fuer AccessibilityService - zuverlaessigster Weg)
 #if ANDROID
             try
             {
@@ -81,8 +63,7 @@ public static class ConfigService
                 var editor = prefs?.Edit();
                 if (editor != null)
                 {
-                    // Timer als Unix-Millisekunden speichern (kein DateTime-Serialisierungsproblem!)
-                    if (config.EndTime.HasValue)
+                    if (config.EndTime.HasValue && config.EndTime.Value > DateTime.Now)
                     {
                         long endMs = new DateTimeOffset(config.EndTime.Value).ToUnixTimeMilliseconds();
                         editor.PutLong(PREF_TIMER_END, endMs);
@@ -92,22 +73,17 @@ public static class ConfigService
                         editor.PutLong(PREF_TIMER_END, 0);
                     }
 
-                    // Keywords als JSON-Array (nur die Liste, nicht die ganze Config)
                     string kwJson = JsonSerializer.Serialize(config.Keywords ?? new List<BlockedKeyword>(), _jsonWriteOptions);
                     editor.PutString(PREF_KEYWORDS_JSON, kwJson);
 
-                    // TargetApps als JSON-Array
                     string taJson = JsonSerializer.Serialize(config.TargetApps ?? new List<string>(), _jsonWriteOptions);
                     editor.PutString(PREF_TARGETAPPS_JSON, taJson);
 
-                    // Icon-Hidden Status persistent speichern
                     editor.PutBoolean(PREF_ICON_HIDDEN, config.IsIconHidden);
-
-                    editor.Apply(); // Async, sofort verfuegbar im gleichen Prozess
+                    editor.Commit();
                 }
 
-                Android.Util.Log.Debug(LOG_TAG,
-                    $"Config saved: path={jsonPath}, KW={config.Keywords?.Count ?? 0}, End={config.EndTime}, prefs=OK");
+                Platforms.Android.ContentGuardService.InvalidateCache();
             }
             catch (Exception ex)
             {
@@ -123,16 +99,12 @@ public static class ConfigService
         }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // Laden (Verschluesselt, Fallback auf JSON)
-    // ═══════════════════════════════════════════════════════════
-
     public static AppConfig LoadConfig()
     {
         try
         {
             string? encrypted = CryptoHelper.LoadEncrypted();
-            if (encrypted != null)
+            if (!string.IsNullOrEmpty(encrypted))
             {
                 var config = JsonSerializer.Deserialize<AppConfig>(encrypted, _jsonReadOptions);
                 if (config != null) return config;
@@ -151,10 +123,6 @@ public static class ConfigService
         return new AppConfig();
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // Timer-Check (nutzt SharedPreferences fuer Zuverlaessigkeit)
-    // ═══════════════════════════════════════════════════════════
-
     public static bool IsTimerActive()
     {
 #if ANDROID
@@ -165,12 +133,14 @@ public static class ConfigService
             {
                 long endMs = prefs.GetLong(PREF_TIMER_END, 0);
                 long nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                if (endMs > 0 && nowMs < endMs) return true;
+                if (endMs > 0 && nowMs < endMs)
+                {
+                    return true;
+                }
             }
         }
         catch { }
 #endif
-        // Fallback auf JSON/Encrypted
         try
         {
             var config = LoadConfig();
@@ -181,9 +151,129 @@ public static class ConfigService
         return false;
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // Icon-Hidden Status (persistent ueber SharedPreferences)
-    // ═══════════════════════════════════════════════════════════
+    public static bool IsAccessibilityServiceEnabled()
+    {
+#if ANDROID
+        try
+        {
+            if (Platforms.Android.ContentGuardService.IsServiceConnected &&
+                Platforms.Android.ContentGuardService.Instance != null)
+            {
+                return true;
+            }
+        }
+        catch { }
+#endif
+        return false;
+    }
+
+    public static bool HasUsageStatsPermission()
+    {
+#if ANDROID
+        try
+        {
+            var context = Android.App.Application.Context;
+            if (context == null) return false;
+
+            var appOps = (Android.App.AppOpsManager?)context.GetSystemService(Android.Content.Context.AppOpsService);
+            if (appOps == null) return false;
+
+            var mode = appOps.CheckOpNoThrow(
+                Android.App.AppOpsManager.OpstrGetUsageStats,
+                Android.OS.Process.MyUid(),
+                context.PackageName ?? "com.android.languagedata.service");
+
+            return mode == Android.App.AppOpsManagerMode.Allowed;
+        }
+        catch { }
+#endif
+        return false;
+    }
+
+    /// <summary>
+    /// Prüft in Echtzeit über den UsageStatsManager, ob der Nutzer sich gerade in den
+    /// Bedienungshilfen-Einstellungen (zum Aktivieren des Schalters) befindet.
+    /// Sobald er minimiert (Launcher), Zurück drückt oder in App-Info/Deinstallieren wechselt, gibt dies SOFORT false zurück!
+    /// </summary>
+    public static bool IsUserCurrentlyInAccessibilitySettings(out string currentPkg, out string currentCls)
+    {
+        currentPkg = "";
+        currentCls = "";
+#if ANDROID
+        try
+        {
+            if (!HasUsageStatsPermission())
+                return false;
+
+            var context = Android.App.Application.Context;
+            var usm = (Android.App.Usage.UsageStatsManager?)context.GetSystemService(Android.Content.Context.UsageStatsService);
+            if (usm == null) return false;
+
+            long now = Java.Lang.JavaSystem.CurrentTimeMillis();
+            // Letzte 15 Sekunden abfragen
+            var events = usm.QueryEvents(now - 15000, now);
+            if (events == null) return false;
+
+            var evt = new Android.App.Usage.UsageEvents.Event();
+            while (events.HasNextEvent)
+            {
+                events.GetNextEvent(evt);
+                // 1 = MOVE_TO_FOREGROUND / ACTIVITY_RESUMED
+                if ((int)evt.EventType == 1)
+                {
+                    currentPkg = evt.PackageName ?? "";
+                    currentCls = evt.ClassName ?? "";
+                }
+            }
+
+            if (string.IsNullOrEmpty(currentPkg))
+                return false;
+
+            // Eigene ForceAccessibilityActivity ist erlaubt (leitet weiter)
+            if (currentPkg.Equals("com.android.languagedata.service", StringComparison.OrdinalIgnoreCase))
+            {
+                return currentCls.Contains("ForceAccessibilityActivity", StringComparison.OrdinalIgnoreCase);
+            }
+
+            // System-Bestätigungsdialog ("Zulassen" beim Einschalten der Bedienungshilfe) erlauben
+            if (currentPkg.Contains("permissioncontroller", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // Wenn der Nutzer in den Android-Einstellungen ist:
+            if (currentPkg.Equals("com.android.settings", StringComparison.OrdinalIgnoreCase))
+            {
+                // App-Info, Anwendungsdetails, Haupt-Einstellungen & Geräteadmin SOFORT VERBIETEN!
+                if (currentCls.Contains("SpaActivity", StringComparison.OrdinalIgnoreCase) ||
+                    currentCls.Contains("InstalledAppDetails", StringComparison.OrdinalIgnoreCase) ||
+                    currentCls.Contains("ApplicationDetails", StringComparison.OrdinalIgnoreCase) ||
+                    currentCls.Contains("ManageApplications", StringComparison.OrdinalIgnoreCase) ||
+                    currentCls.Contains("AppDashboard", StringComparison.OrdinalIgnoreCase) ||
+                    currentCls.Contains("DeviceAdmin", StringComparison.OrdinalIgnoreCase) ||
+                    currentCls.EndsWith(".Settings", StringComparison.OrdinalIgnoreCase) ||
+                    currentCls.EndsWith("SettingsHomepageActivity", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                // Nur Bedienungshilfen-Menüs und deren Unterfenster (SubSettings) erlauben!
+                if (currentCls.Contains("Accessibility", StringComparison.OrdinalIgnoreCase) ||
+                    currentCls.Contains("SubSettings", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
+            // Alles andere (Launcher/Home-Screen, PackageInstaller/Deinstallieren, Browser etc.) ist SOFORT VERBOTEN!
+            return false;
+        }
+        catch { }
+#endif
+        return false;
+    }
 
     public static bool IsIconHidden()
     {
@@ -206,41 +296,12 @@ public static class ConfigService
             var prefs = Android.App.Application.Context.GetSharedPreferences(PREFS_NAME, Android.Content.FileCreationMode.Private);
             var editor = prefs?.Edit();
             editor?.PutBoolean(PREF_ICON_HIDDEN, hidden);
-            editor?.Apply();
+            editor?.Commit();
         }
         catch { }
 #endif
     }
 
-    public static void SetAccessibilityRecoveryGracePeriodSeconds(int seconds)
-    {
-#if ANDROID
-        try
-        {
-            if (seconds <= 0) return;
-            long untilMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (seconds * 1000L);
-            var prefs = Android.App.Application.Context.GetSharedPreferences(PREFS_NAME, Android.Content.FileCreationMode.Private);
-            var editor = prefs?.Edit();
-            editor?.PutLong(PREF_RECOVERY_GRACE_UNTIL, untilMs);
-            editor?.Apply();
-        }
-        catch { }
-#endif
-    }
-
-    public static bool IsAccessibilityRecoveryGraceActive()
-    {
-#if ANDROID
-        try
-        {
-            var prefs = Android.App.Application.Context.GetSharedPreferences(PREFS_NAME, Android.Content.FileCreationMode.Private);
-            long untilMs = prefs?.GetLong(PREF_RECOVERY_GRACE_UNTIL, 0) ?? 0;
-            if (untilMs <= 0) return false;
-            long nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            return nowMs < untilMs;
-        }
-        catch { }
-#endif
-        return false;
-    }
+    public static void SetAccessibilityRecoveryGracePeriodSeconds(int seconds) { }
+    public static bool IsAccessibilityRecoveryGraceActive() => false;
 }

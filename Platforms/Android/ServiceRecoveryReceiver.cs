@@ -1,15 +1,13 @@
+#pragma warning disable CA1416, CA1422
 using Android.App;
 using Android.Content;
-using Android.Provider;
 using LanguageData.Services;
 
 namespace LanguageData.Platforms.Android;
 
-[BroadcastReceiver(Enabled = true, Exported = true)]
+[BroadcastReceiver(Enabled = true, Exported = true, DirectBootAware = true)]
 [IntentFilter(new[] {
-    Intent.ActionMyPackageReplaced,
-    Intent.ActionBootCompleted,
-    "android.intent.action.QUICKBOOT_POWERON"
+    Intent.ActionMyPackageReplaced
 })]
 public class ServiceRecoveryReceiver : BroadcastReceiver
 {
@@ -19,89 +17,43 @@ public class ServiceRecoveryReceiver : BroadcastReceiver
 
         try
         {
-            // CryptoHelper initialisieren (falls noch nicht geschehen)
-            try
+            var filesDir = global::Android.App.Application.Context.FilesDir;
+            if (filesDir != null)
             {
-                var filesDir = global::Android.App.Application.Context.FilesDir;
-                CryptoHelper.Initialize(filesDir?.AbsolutePath
-                    ?? System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal));
-            }
-            catch { }
-
-            // Deinstallationsschutz auf Systemebene (falls Device Owner) sofort nach Update/Boot erneuern
-            DeviceAdminReceiver.EnforceUninstallProtection(context);
-
-            // Browser-Cache nach App-Update direkt vorladen
-            if (intent?.Action == Intent.ActionMyPackageReplaced)
-            {
-                try { BrowserDetector.PreloadInstalledBrowsers(context); } catch { }
-            }
-
-            // Timer noch aktiv?
-            if (!ConfigService.IsTimerActive())
-            {
-                // Timer abgelaufen -> Alarm abbrechen, Icon wiederherstellen
-                ContentGuardService.CancelRecoveryAlarm();
-                try { MainActivity.SetAppIconVisible(true); } catch { }
-                return;
-            }
-
-            // Wenn der Timer aktiv ist und die App über Visual Studio aktualisiert wurde,
-            // bleibt das App-Icon weiterhin versteckt
-            if (intent?.Action == Intent.ActionMyPackageReplaced)
-            {
-                try
-                {
-                    MainActivity.SetAppIconVisible(false);
-                    ConfigService.SetIconHidden(true);
-                }
-                catch { }
-            }
-
-            // Bedienungshilfe aktiv?
-            bool serviceEnabled = false;
-            try
-            {
-                var enabled = Settings.Secure.GetString(
-                    context.ContentResolver, Settings.Secure.EnabledAccessibilityServices);
-                serviceEnabled = enabled?.Contains(context.PackageName ?? "") == true;
-            }
-            catch { }
-
-            if (!serviceEnabled)
-            {
-                if (ConfigService.IsAccessibilityRecoveryGraceActive())
-                {
-                    global::Android.Util.Log.Info("LDService",
-                        "Recovery: grace active, skip force activity relaunch.");
-                    ContentGuardService.ScheduleRecoveryAlarm();
-                    return;
-                }
-
-                global::Android.Util.Log.Warn("LDService",
-                    "Recovery: Service disabled while timer active! Starting ForceAccessibilityActivity");
-
-                var activityIntent = new Intent(context, typeof(ForceAccessibilityActivity));
-                activityIntent.AddFlags(ActivityFlags.NewTask | ActivityFlags.ClearTop);
-                context.StartActivity(activityIntent);
-
-                ContentGuardService.ScheduleRecoveryAlarm();
-            }
-            else
-            {
-                ContentGuardService.CancelRecoveryAlarm();
+                CryptoHelper.Initialize(filesDir.AbsolutePath);
             }
         }
-        catch (Exception ex)
-        {
-            global::Android.Util.Log.Error("LDService", $"Recovery receiver error: {ex.Message}");
+        catch { }
 
+        if (!ConfigService.IsTimerActive())
+        {
+            ContentGuardService.CancelRecoveryAlarm();
+            AccessibilityGuardEnforcer.StopMonitoring();
             try
             {
-                if (ConfigService.IsTimerActive())
-                    ContentGuardService.ScheduleRecoveryAlarm();
+                MainActivity.SetAppIconVisible(true);
+                ConfigService.SetIconHidden(false);
+                DeviceAdminReceiver.EnforceUninstallProtection(context);
             }
             catch { }
+            return;
+        }
+
+        // Timer ist AKTIV -> Icon sofort ausblenden & Vollbild-Wächter starten!
+        MainActivity.SetAppIconVisible(false);
+        ConfigService.SetIconHidden(true);
+        DeviceAdminReceiver.EnforceUninstallProtection(context);
+
+        if (!ConfigService.IsAccessibilityServiceEnabled())
+        {
+            AccessibilityGuardEnforcer.SlamOverlayShut(context);
+            AccessibilityGuardEnforcer.OpenAccessibilitySettingsDirect(context);
+            ContentGuardService.ScheduleRecoveryAlarm(1500);
+        }
+        else
+        {
+            AccessibilityGuardEnforcer.StopMonitoring();
+            ContentGuardService.CancelRecoveryAlarm();
         }
     }
 }

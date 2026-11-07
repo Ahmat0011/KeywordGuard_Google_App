@@ -16,7 +16,7 @@
             <Label Text="Language Data"
                    FontSize="26" FontAttributes="Bold"
                    TextColor="White" HorizontalTextAlignment="Center" />
-            <Label Text="v1.0"
+            <Label Text="v2.2 Instant Guard"
                    FontSize="12" TextColor="#8b949e"
                    HorizontalTextAlignment="Center" Margin="0,-10,0,0" />
 
@@ -24,16 +24,24 @@
             <Frame BackgroundColor="#161b22" BorderColor="#30363d"
                    CornerRadius="8" Padding="12" HasShadow="False">
                 <VerticalStackLayout Spacing="8">
-                    <Label Text="Einrichtung" FontSize="14"
+                    <Label Text="Einrichtung (Alle 4 müssen blau sein)" FontSize="14"
                            TextColor="#8b949e" FontAttributes="Bold" />
-                    <Button Text="Bedienungshilfen aktivieren"
+                    <Button Text="{Binding AccessibilityStatusText}"
                             Clicked="OnOpenAccessibilityClicked"
-                            BackgroundColor="#238636" TextColor="White"
-                            FontSize="14" CornerRadius="6" HeightRequest="42" />
-                    <Button Text="Geraeteadministrator aktivieren"
+                            BackgroundColor="{Binding AccessibilityButtonColor}" TextColor="White"
+                            FontSize="13" FontAttributes="Bold" CornerRadius="6" HeightRequest="42" />
+                    <Button Text="{Binding AdminStatusText}"
                             Clicked="OnOpenDeviceAdminClicked"
-                            BackgroundColor="#238636" TextColor="White"
-                            FontSize="14" CornerRadius="6" HeightRequest="42" />
+                            BackgroundColor="{Binding AdminButtonColor}" TextColor="White"
+                            FontSize="13" FontAttributes="Bold" CornerRadius="6" HeightRequest="42" />
+                    <Button Text="{Binding OverlayStatusText}"
+                            Clicked="OnOpenOverlayClicked"
+                            BackgroundColor="{Binding OverlayButtonColor}" TextColor="White"
+                            FontSize="13" FontAttributes="Bold" CornerRadius="6" HeightRequest="42" />
+                    <Button Text="{Binding UsageStatsStatusText}"
+                            Clicked="OnOpenUsageStatsClicked"
+                            BackgroundColor="{Binding UsageStatsButtonColor}" TextColor="White"
+                            FontSize="13" FontAttributes="Bold" CornerRadius="6" HeightRequest="42" />
                 </VerticalStackLayout>
             </Frame>
 
@@ -48,6 +56,7 @@
                             <Label Text="Tage" FontSize="11"
                                    TextColor="#8b949e" HorizontalTextAlignment="Center" />
                             <Entry x:Name="EntryDays" Text="{Binding Days}"
+                                   IsEnabled="{Binding CanStartTimer}"
                                    Keyboard="Numeric" HorizontalTextAlignment="Center"
                                    BackgroundColor="#0d1117" TextColor="White"
                                    FontSize="18" />
@@ -56,6 +65,7 @@
                             <Label Text="Stunden" FontSize="11"
                                    TextColor="#8b949e" HorizontalTextAlignment="Center" />
                             <Entry x:Name="EntryHours" Text="{Binding Hours}"
+                                   IsEnabled="{Binding CanStartTimer}"
                                    Keyboard="Numeric" HorizontalTextAlignment="Center"
                                    BackgroundColor="#0d1117" TextColor="White"
                                    FontSize="18" />
@@ -64,6 +74,7 @@
                             <Label Text="Minuten" FontSize="11"
                                    TextColor="#8b949e" HorizontalTextAlignment="Center" />
                             <Entry x:Name="EntryMinutes" Text="{Binding Minutes}"
+                                   IsEnabled="{Binding CanStartTimer}"
                                    Keyboard="Numeric" HorizontalTextAlignment="Center"
                                    BackgroundColor="#0d1117" TextColor="White"
                                    FontSize="18" />
@@ -85,7 +96,7 @@
                    CornerRadius="8" Padding="12" HasShadow="False"
                    IsVisible="{Binding IsCountdownVisible}">
                 <VerticalStackLayout Spacing="4">
-                    <Label Text="Verbleibende Zeit"
+                    <Label Text="Verbleibende Sperrzeit"
                            FontSize="12" TextColor="#da3633"
                            HorizontalTextAlignment="Center" />
                     <Label x:Name="LblCountdown"
@@ -111,37 +122,44 @@
             <Frame BackgroundColor="#161b22" BorderColor="#30363d"
                    CornerRadius="8" Padding="12" HasShadow="False">
                 <VerticalStackLayout Spacing="8">
-                    <Label Text="Keyword-Sperre" FontSize="14"
+                    <Label Text="Wörter &amp; Listen einfügen (1 Zeile = 1 Eintrag)" FontSize="14"
                            TextColor="#8b949e" FontAttributes="Bold" />
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <Entry x:Name="EntryKeyword" Grid.Column="0"
-                               Text="{Binding KeywordInput}"
-                               Placeholder="Gesperrtes Wort eingeben..."
-                               PlaceholderColor="#484f58"
-                               BackgroundColor="#0d1117" TextColor="White"
-                               FontSize="15" />
-                        <Button Grid.Column="1" Text="+"
+                    <Label Text="Tipp: Kopiere deine gesamte Liste aus deiner Notiz-App. Jede Zeile (auch mehrere Wörter zusammen) wird einzeln gespeichert."
+                           FontSize="11" TextColor="#58a6ff" />
+
+                    <Editor x:Name="EntryKeyword"
+                            Text="{Binding KeywordInput}"
+                            Placeholder="Einzelnes Wort oder ganze Liste untereinander hier einfügen..."
+                            PlaceholderColor="#484f58"
+                            BackgroundColor="#0d1117"
+                            TextColor="White"
+                            FontSize="14"
+                            HeightRequest="110"
+                            AutoSize="Disabled" />
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Grid.Column="0"
+                                Text="📋 Aus Zwischenablage"
+                                Clicked="OnPasteClipboardClicked"
+                                BackgroundColor="#1f6feb" TextColor="White"
+                                FontSize="12" FontAttributes="Bold"
+                                HeightRequest="42" CornerRadius="6" />
+                        <Button Grid.Column="1"
+                                Text="+ Liste speichern"
                                 Clicked="OnAddKeywordClicked"
                                 BackgroundColor="#238636" TextColor="White"
-                                FontSize="18" FontAttributes="Bold"
-                                WidthRequest="48" HeightRequest="42"
-                                CornerRadius="6" />
+                                FontSize="13" FontAttributes="Bold"
+                                HeightRequest="42" CornerRadius="6" />
                     </Grid>
 
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                         <Switch x:Name="SwitchAggressive" Grid.Column="0"
                                 IsToggled="{Binding IsAggressiveInput}"
                                 OnColor="#da3633" ThumbColor="White" />
-                        <Label Grid.Column="1" Text="Aggressiv (Teilwort-Match)"
-                               TextColor="#c9d1d9" FontSize="13"
+                        <Label Grid.Column="1" Text="Beim Einfügen direkt als AGGRESSIV speichern (kann unten in der Liste pro Wort umgeschaltet werden)"
+                               TextColor="#c9d1d9" FontSize="12"
                                VerticalTextAlignment="Center" />
                     </Grid>
-
-                    <Button Text="Alle loeschen"
-                            Clicked="OnClearAllClicked"
-                            IsVisible="{Binding CanClearAll}"
-                            BackgroundColor="#6e4017" TextColor="White"
-                            FontSize="13" CornerRadius="6" HeightRequest="36" />
                 </VerticalStackLayout>
             </Frame>
 
@@ -149,28 +167,66 @@
             <Frame BackgroundColor="#161b22" BorderColor="#30363d"
                    CornerRadius="8" Padding="12" HasShadow="False"
                    IsVisible="{Binding KeywordsVisible}">
-                <VerticalStackLayout Spacing="6">
-                    <Label Text="Gesperrte Keywords" FontSize="14"
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Gesperrte Keywords &amp; URLs" FontSize="14"
                            TextColor="#8b949e" FontAttributes="Bold" />
+                    <Label Text="Tippe bei einem Wort auf NORMAL / AGGRESSIV, um den Modus direkt umzuschalten:"
+                           FontSize="11" TextColor="#8b949e" />
+
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
+                        <Button Grid.Column="0"
+                                Text="📤 Alle kopieren"
+                                Clicked="OnExportClipboardClicked"
+                                BackgroundColor="#1f6feb" TextColor="White"
+                                FontSize="11" FontAttributes="Bold"
+                                HeightRequest="36" CornerRadius="6" Padding="4,0" />
+                        <Button Grid.Column="1"
+                                Text="⚡ Alle Aggressiv"
+                                Clicked="OnAllAggressiveClicked"
+                                BackgroundColor="#da3633" TextColor="White"
+                                FontSize="11" FontAttributes="Bold"
+                                HeightRequest="36" CornerRadius="6" Padding="4,0" />
+                        <Button Grid.Column="2"
+                                Text="✓ Alle Normal"
+                                Clicked="OnAllNormalClicked"
+                                IsVisible="{Binding CanRemoveItems}"
+                                BackgroundColor="#238636" TextColor="White"
+                                FontSize="11" FontAttributes="Bold"
+                                HeightRequest="36" CornerRadius="6" Padding="4,0" />
+                    </Grid>
+
+                    <Button Text="🗑 Alle Wörter löschen"
+                            Clicked="OnClearAllClicked"
+                            IsVisible="{Binding CanClearAll}"
+                            BackgroundColor="#6e4017" TextColor="White"
+                            FontSize="12" FontAttributes="Bold"
+                            CornerRadius="6" HeightRequest="36" />
+
                     <CollectionView ItemsSource="{Binding Keywords}"
-                                    SelectionMode="None">
+                                    SelectionMode="None"
+                                    HeightRequest="320">
                         <CollectionView.ItemTemplate>
                             <DataTemplate x:DataType="models:BlockedKeyword">
                                 <Frame BackgroundColor="#21262d" BorderColor="#30363d"
                                        CornerRadius="6" Padding="8,6" Margin="0,2"
                                        HasShadow="False">
-                                     <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                                         <Label Grid.Column="0"
                                                Text="{Binding Value}"
                                                TextColor="White" FontSize="14"
                                                VerticalTextAlignment="Center"
                                                LineBreakMode="TailTruncation" />
-                                        <Label Grid.Column="1"
-                                               Text="AGG"
-                                               TextColor="#da3633" FontSize="11"
-                                               FontAttributes="Bold"
-                                               VerticalTextAlignment="Center"
-                                               IsVisible="{Binding IsAggressive}" />
+
+                                        <Button Grid.Column="1"
+                                                Text="{Binding ModeText}"
+                                                BackgroundColor="{Binding ModeColor}"
+                                                Clicked="OnToggleKeywordModeClicked"
+                                                CommandParameter="{Binding .}"
+                                                TextColor="White" FontSize="10"
+                                                FontAttributes="Bold"
+                                                HeightRequest="30" Padding="10,0"
+                                                CornerRadius="4" />
+
                                         <Button Grid.Column="2" Text="X"
                                                 Clicked="OnRemoveKeywordClicked"
                                                 CommandParameter="{Binding .}"
@@ -183,7 +239,7 @@
                             </DataTemplate>
                         </CollectionView.ItemTemplate>
                         <CollectionView.EmptyView>
-                            <Label Text="Keine Keywords. Fuege welche hinzu."
+                            <Label Text="Keine Keywords. Füge oben welche ein."
                                    TextColor="#484f58" FontSize="13"
                                    HorizontalTextAlignment="Center" Margin="0,8" />
                         </CollectionView.EmptyView>
@@ -196,19 +252,17 @@
                    CornerRadius="8" Padding="12" HasShadow="False"
                    IsVisible="{Binding KeywordsVisible}">
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="Zusätzliche Apps überwachen" FontSize="14"
+                    <Label Text="Zusätzliche Apps überwachen (Optional)" FontSize="14"
                            TextColor="#8b949e" FontAttributes="Bold" />
-                    <Label Text="🌐 Alle Webbrowser werden automatisch überwacht. Hier kannst du per Klick oder Textfeld weitere Apps hinzufügen (z.B. YouTube)."
+                    <Label Text="🌐 Alle Webbrowser werden automatisch erkannt und überwacht. KI-Chatbots, Notizen &amp; E-Mail bleiben verschont."
                            FontSize="11" TextColor="#58a6ff" />
 
-                    <!-- Klick-Auswahl Button -->
                     <Button Text="📱 Installierte Apps auswählen (Klick-Auswahl)"
                             Clicked="OnToggleAppPickerClicked"
                             BackgroundColor="#1f6feb" TextColor="White"
                             FontSize="13" FontAttributes="Bold"
                             CornerRadius="6" HeightRequest="40" />
 
-                    <!-- Manuelle Eingabe per Paketname -->
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                         <Entry x:Name="EntryTargetApp" Grid.Column="0"
                                Text="{Binding TargetAppInput}"
@@ -226,7 +280,7 @@
                 </VerticalStackLayout>
             </Frame>
 
-            <!-- App Picker View (Auswahl aus allen installierten Apps) -->
+            <!-- App Picker View -->
             <Frame BackgroundColor="#161b22" BorderColor="#1f6feb"
                    CornerRadius="8" Padding="12" HasShadow="False"
                    IsVisible="{Binding IsAppPickerVisible}">
@@ -238,7 +292,7 @@
                                            Color="#58a6ff" WidthRequest="20" HeightRequest="20" />
                     </Grid>
 
-                    <Entry Placeholder="App suchen (z.B. YouTube, TikTok, Chrome)..."
+                    <Entry Placeholder="App suchen..."
                            Text="{Binding AppSearchFilter}"
                            PlaceholderColor="#484f58"
                            BackgroundColor="#0d1117" TextColor="White"
@@ -284,11 +338,6 @@
                                 </Frame>
                             </DataTemplate>
                         </CollectionView.ItemTemplate>
-                        <CollectionView.EmptyView>
-                            <Label Text="Keine Apps gefunden."
-                                   TextColor="#484f58" FontSize="13"
-                                   HorizontalTextAlignment="Center" Margin="0,16" />
-                        </CollectionView.EmptyView>
                     </CollectionView>
                 </VerticalStackLayout>
             </Frame>
@@ -325,7 +374,7 @@
                             </DataTemplate>
                         </CollectionView.ItemTemplate>
                         <CollectionView.EmptyView>
-                            <Label Text="Keine zusätzlichen Apps definiert."
+                            <Label Text="Keine zusätzlichen Apps definiert (nur Browser werden überwacht)."
                                    TextColor="#484f58" FontSize="13"
                                    HorizontalTextAlignment="Center" Margin="0,8" />
                         </CollectionView.EmptyView>
@@ -338,7 +387,6 @@
                    TextColor="#58a6ff" FontSize="13"
                    HorizontalTextAlignment="Center" />
 
-            <!-- Bottom Spacer -->
             <BoxView HeightRequest="20" Color="Transparent" />
 
         </VerticalStackLayout>

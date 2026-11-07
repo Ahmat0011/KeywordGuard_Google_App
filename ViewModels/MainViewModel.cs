@@ -1,6 +1,8 @@
+#pragma warning disable CA1416, CA1422
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text;
 using LanguageData.Models;
 using LanguageData.Services;
 
@@ -15,14 +17,18 @@ public class MainViewModel : INotifyPropertyChanged
     private string _minutes = "30";
     private string _statusText = "";
     private string _countdownText = "";
-    private string _serviceStatusText = "";
-    private string _serviceStatusColor = "#0d1117";
+    private string _accessibilityStatusText = "Bedienungshilfen aktivieren";
+    private string _accessibilityButtonColor = "#238636";
+    private string _adminStatusText = "Geräteadministrator aktivieren";
+    private string _adminButtonColor = "#238636";
+    private string _overlayStatusText = "Hintergrund-Overlay erlauben";
+    private string _overlayButtonColor = "#6e4017";
+    private string _usageStatsStatusText = "Nutzungszugriff (0ms Sofort-Schutz) erlauben";
+    private string _usageStatsButtonColor = "#6e4017";
     private bool _isTimerRunning;
     private bool _isCountdownVisible;
     private bool _isAggressiveInput;
     private bool _keywordsVisible = false;
-    private bool _isProtected;
-    private bool _isTrapActive;
     private DateTime? _endTime;
     private int _protectTapCount;
 
@@ -36,7 +42,6 @@ public class MainViewModel : INotifyPropertyChanged
     public ObservableCollection<string> TargetApps { get; } = new();
     public ObservableCollection<AppItemModel> InstalledApps { get; } = new();
 
-    // Properties
     public string KeywordInput { get => _keywordInput; set { _keywordInput = value; OnPropertyChanged(); } }
     public string TargetAppInput { get => _targetAppInput; set { _targetAppInput = value; OnPropertyChanged(); } }
     public bool IsAggressiveInput { get => _isAggressiveInput; set { _isAggressiveInput = value; OnPropertyChanged(); } }
@@ -45,8 +50,15 @@ public class MainViewModel : INotifyPropertyChanged
     public string Minutes { get => _minutes; set { _minutes = value; OnPropertyChanged(); } }
     public string StatusText { get => _statusText; set { _statusText = value; OnPropertyChanged(); } }
     public string CountdownText { get => _countdownText; set { _countdownText = value; OnPropertyChanged(); } }
-    public string ServiceStatusText { get => _serviceStatusText; set { _serviceStatusText = value; OnPropertyChanged(); } }
-    public string ServiceStatusColor { get => _serviceStatusColor; set { _serviceStatusColor = value; OnPropertyChanged(); } }
+
+    public string AccessibilityStatusText { get => _accessibilityStatusText; set { _accessibilityStatusText = value; OnPropertyChanged(); } }
+    public string AccessibilityButtonColor { get => _accessibilityButtonColor; set { _accessibilityButtonColor = value; OnPropertyChanged(); } }
+    public string AdminStatusText { get => _adminStatusText; set { _adminStatusText = value; OnPropertyChanged(); } }
+    public string AdminButtonColor { get => _adminButtonColor; set { _adminButtonColor = value; OnPropertyChanged(); } }
+    public string OverlayStatusText { get => _overlayStatusText; set { _overlayStatusText = value; OnPropertyChanged(); } }
+    public string OverlayButtonColor { get => _overlayButtonColor; set { _overlayButtonColor = value; OnPropertyChanged(); } }
+    public string UsageStatsStatusText { get => _usageStatsStatusText; set { _usageStatsStatusText = value; OnPropertyChanged(); } }
+    public string UsageStatsButtonColor { get => _usageStatsButtonColor; set { _usageStatsButtonColor = value; OnPropertyChanged(); } }
 
     public bool IsAppPickerVisible
     {
@@ -86,10 +98,9 @@ public class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(CanClearAll));
         }
     }
+
     public bool IsCountdownVisible { get => _isCountdownVisible; set { _isCountdownVisible = value; OnPropertyChanged(); } }
     public bool KeywordsVisible { get => _keywordsVisible; set { _keywordsVisible = value; OnPropertyChanged(); } }
-    public bool IsProtected { get => _isProtected; set { _isProtected = value; OnPropertyChanged(); } }
-    public bool IsTrapActive { get => _isTrapActive; set { _isTrapActive = value; OnPropertyChanged(); } }
     public bool CanStartTimer => !IsTimerRunning;
     public bool CanRemoveItems => !IsTimerRunning;
     public bool CanClearAll => !IsTimerRunning && Keywords.Count > 0;
@@ -104,60 +115,254 @@ public class MainViewModel : INotifyPropertyChanged
             _endTime = cfg.EndTime;
             IsTimerRunning = true;
             IsCountdownVisible = true;
-            IsProtected = true;
-            IsTrapActive = true;
             KeywordsVisible = false;
-            StatusText = "";
-            ServiceStatusText = "";
-            ServiceStatusColor = "#0d1117";
+            StatusText = "🔒 Schutz ist aktiv.";
         }
         else
         {
             KeywordsVisible = false;
-            IsProtected = true;
-            StatusText = "";
+            StatusText = "Bereit. Timer ist inaktiv (Voller Zugriff).";
         }
+
+        RefreshPermissionStates();
     }
 
+    public void RefreshPermissionStates()
+    {
+#if ANDROID
+        try
+        {
+            var ctx = global::Android.App.Application.Context;
+            bool accOk = ConfigService.IsAccessibilityServiceEnabled();
+            AccessibilityStatusText = accOk ? "✓ 1. Bedienungshilfe ist AKTIV" : "⚠ 1. Bedienungshilfe aktivieren (Pflicht)";
+            AccessibilityButtonColor = accOk ? "#1f6feb" : "#da3633";
+
+            bool adminOk = Platforms.Android.DeviceAdminReceiver.IsAdminActive(ctx);
+            AdminStatusText = adminOk ? "✓ 2. Geräteadministrator ist AKTIV" : "⚠ 2. Geräteadministrator aktivieren (Pflicht)";
+            AdminButtonColor = adminOk ? "#1f6feb" : "#da3633";
+
+            bool overlayOk = global::Android.OS.Build.VERSION.SdkInt < global::Android.OS.BuildVersionCodes.M ||
+                             global::Android.Provider.Settings.CanDrawOverlays(ctx);
+            OverlayStatusText = overlayOk ? "✓ 3. Hintergrund-Overlay ist AKTIV" : "⚠ 3. Hintergrund-Overlay erlauben (Pflicht)";
+            OverlayButtonColor = overlayOk ? "#1f6feb" : "#da3633";
+
+            bool usageOk = ConfigService.HasUsageStatsPermission();
+            UsageStatsStatusText = usageOk ? "✓ 4. Nutzungszugriff (0ms-Wächter) AKTIV" : "⚠ 4. Nutzungszugriff erlauben (Pflicht)";
+            UsageStatsButtonColor = usageOk ? "#1f6feb" : "#da3633";
+        }
+        catch { }
+#endif
+    }
+
+    /// <summary>
+    /// Fügt ein einzelnes Wort oder eine komplette mehrzeilige Liste (untereinander geschrieben) hinzu.
+    /// Jede Zeile wird als eigener Eintrag gespeichert (auch Wortgruppen mit Leerzeichen!).
+    /// </summary>
     public void AddKeyword()
     {
         if (string.IsNullOrWhiteSpace(KeywordInput)) return;
-        string val = KeywordInput.Trim();
+
+        var rawLines = KeywordInput
+            .Split(new[] { '\r', '\n', ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToList();
+
+        if (rawLines.Count == 0) return;
 
         var cfg = ConfigService.LoadConfig();
-        if (cfg.Keywords.Any(k => k.Value.Equals(val, StringComparison.OrdinalIgnoreCase)))
+        int addedCount = 0;
+        int updatedCount = 0;
+
+        foreach (var rawLine in rawLines)
         {
-            StatusText = "Keyword existiert bereits!";
+            string val = rawLine;
+            bool lineAggressive = IsAggressiveInput;
+
+            if (val.StartsWith("[AGG]", StringComparison.OrdinalIgnoreCase))
+            {
+                lineAggressive = true;
+                val = val[5..].Trim();
+            }
+            else if (val.StartsWith("[NORM]", StringComparison.OrdinalIgnoreCase))
+            {
+                lineAggressive = false;
+                val = val[6..].Trim();
+            }
+            else if (val.StartsWith("*") && val.Length > 1)
+            {
+                lineAggressive = true;
+                val = val[1..].Trim();
+            }
+
+            if (val.StartsWith("- ") || val.StartsWith("• "))
+            {
+                val = val[2..].Trim();
+            }
+
+            if (string.IsNullOrWhiteSpace(val)) continue;
+
+            var existing = cfg.Keywords.FirstOrDefault(k => k.Value.Equals(val, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                cfg.Keywords.Add(new BlockedKeyword { Value = val, IsAggressive = lineAggressive });
+                if (KeywordsVisible)
+                    Keywords.Add(new BlockedKeyword { Value = val, IsAggressive = lineAggressive });
+                addedCount++;
+            }
+            else if (lineAggressive && !existing.IsAggressive)
+            {
+                existing.IsAggressive = true;
+                var uiItem = Keywords.FirstOrDefault(k => k.Value.Equals(val, StringComparison.OrdinalIgnoreCase));
+                if (uiItem != null) uiItem.IsAggressive = true;
+                updatedCount++;
+            }
+        }
+
+        if (addedCount > 0 || updatedCount > 0)
+        {
+            ConfigService.SaveConfig(cfg);
+            StatusText = IsTimerRunning
+                ? $"✓ {addedCount} neu hinzugefügt, {updatedCount} aktualisiert (sofort aktiv!)."
+                : $"✓ {addedCount} Wort/Wörter hinzugefügt ({updatedCount} aktualisiert).";
+        }
+        else
+        {
+            StatusText = "Alle eingegebenen Wörter existieren bereits!";
+        }
+
+        KeywordInput = "";
+        OnPropertyChanged(nameof(CanClearAll));
+    }
+
+    /// <summary>
+    /// Schaltet ein einzelnes Wort in der Liste per Klick zwischen NORMAL und AGGRESSIV um.
+    /// </summary>
+    public void ToggleKeywordAggressive(BlockedKeyword item)
+    {
+        if (item == null) return;
+
+        if (IsTimerRunning && item.IsAggressive)
+        {
+            StatusText = "🔒 Während der Timer läuft, kann 'Aggressiv' nicht auf 'Normal' herabgestuft werden!";
             return;
         }
 
-        cfg.Keywords.Add(new BlockedKeyword { Value = val, IsAggressive = IsAggressiveInput });
+        bool newState = !item.IsAggressive;
+        item.IsAggressive = newState;
+
+        var cfg = ConfigService.LoadConfig();
+        var target = cfg.Keywords.FirstOrDefault(k => k.Value.Equals(item.Value, StringComparison.OrdinalIgnoreCase));
+        if (target != null)
+        {
+            target.IsAggressive = newState;
+            ConfigService.SaveConfig(cfg);
+        }
+
+        StatusText = $"'{item.Value}' ist jetzt {(newState ? "AGGRESSIV (Teilwort)" : "NORMAL (Exakt)")}.";
+    }
+
+    /// <summary>
+    /// Setzt alle aktuell gespeicherten Wörter auf einmal auf AGGRESSIV oder NORMAL.
+    /// </summary>
+    public void SetAllKeywordsAggressive(bool makeAggressive)
+    {
+        if (IsTimerRunning && !makeAggressive)
+        {
+            StatusText = "🔒 Während der Timer läuft, können Wörter nicht auf 'Normal' herabgestuft werden!";
+            return;
+        }
+
+        var cfg = ConfigService.LoadConfig();
+        if (cfg.Keywords.Count == 0) return;
+
+        foreach (var k in cfg.Keywords)
+            k.IsAggressive = makeAggressive;
+
         ConfigService.SaveConfig(cfg);
 
-        if (KeywordsVisible)
-            Keywords.Add(new BlockedKeyword { Value = val, IsAggressive = IsAggressiveInput });
+        foreach (var uiKw in Keywords)
+            uiKw.IsAggressive = makeAggressive;
 
-        KeywordInput = "";
-        IsAggressiveInput = false;
-        StatusText = IsTimerRunning ? "Keyword hinzugefuegt (sofort aktiv!)" : "Keyword hinzugefuegt.";
-        OnPropertyChanged(nameof(CanClearAll));
+        StatusText = makeAggressive
+            ? $"✓ Alle {cfg.Keywords.Count} Wörter auf AGGRESSIV gesetzt."
+            : $"✓ Alle {cfg.Keywords.Count} Wörter auf NORMAL gesetzt.";
+    }
+
+    /// <summary>
+    /// Fügt Text direkt aus der Zwischenablage in das mehrzeilige Eingabefeld ein.
+    /// </summary>
+    public async Task PasteFromClipboardAsync()
+    {
+        try
+        {
+            if (Clipboard.Default.HasText)
+            {
+                string? text = await Clipboard.Default.GetTextAsync();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    KeywordInput = string.IsNullOrWhiteSpace(KeywordInput)
+                        ? text.Trim()
+                        : KeywordInput.TrimEnd() + Environment.NewLine + text.Trim();
+
+                    int lineCount = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Length;
+                    StatusText = $"📋 {lineCount} Zeile(n) eingefügt. Tippe jetzt auf '+ Liste speichern'!";
+                    return;
+                }
+            }
+            StatusText = "Zwischenablage ist leer.";
+        }
+        catch
+        {
+            StatusText = "Konnte Zwischenablage nicht lesen.";
+        }
+    }
+
+    /// <summary>
+    /// Kopiert alle gespeicherten Wörter untereinander in die Zwischenablage (für Notizen-Backup).
+    /// </summary>
+    public async Task ExportKeywordsToClipboardAsync()
+    {
+        try
+        {
+            var cfg = ConfigService.LoadConfig();
+            if (cfg.Keywords.Count == 0)
+            {
+                StatusText = "Keine Wörter zum Kopieren vorhanden.";
+                return;
+            }
+
+            var sb = new StringBuilder();
+            foreach (var kw in cfg.Keywords)
+            {
+                if (kw.IsAggressive)
+                    sb.AppendLine($"[AGG] {kw.Value}");
+                else
+                    sb.AppendLine(kw.Value);
+            }
+
+            await Clipboard.Default.SetTextAsync(sb.ToString().TrimEnd());
+            StatusText = $"📤 Alle {cfg.Keywords.Count} Wörter in die Zwischenablage kopiert (inkl. [AGG]-Markierung)!";
+        }
+        catch
+        {
+            StatusText = "Fehler beim Kopieren in die Zwischenablage.";
+        }
     }
 
     public void RemoveKeyword(BlockedKeyword item)
     {
         if (IsTimerRunning)
         {
-            StatusText = "Loeschen waehrend Sperre nicht moeglich!";
+            StatusText = "Löschen während aktivem Timer gesperrt!";
             return;
         }
 
-        if (Keywords.Contains(item))
-        {
-            Keywords.Remove(item);
-            var cfg = ConfigService.LoadConfig();
-            cfg.Keywords.RemoveAll(k => k.Value == item.Value);
-            ConfigService.SaveConfig(cfg);
-        }
+        Keywords.Remove(item);
+        var cfg = ConfigService.LoadConfig();
+        cfg.Keywords.RemoveAll(k => k.Value.Equals(item.Value, StringComparison.OrdinalIgnoreCase));
+        ConfigService.SaveConfig(cfg);
+        StatusText = $"'{item.Value}' wurde gelöscht.";
         OnPropertyChanged(nameof(CanClearAll));
     }
 
@@ -165,7 +370,7 @@ public class MainViewModel : INotifyPropertyChanged
     {
         if (IsTimerRunning)
         {
-            StatusText = "Loeschen waehrend Sperre nicht moeglich!";
+            StatusText = "Löschen während aktivem Timer gesperrt!";
             return;
         }
 
@@ -173,7 +378,7 @@ public class MainViewModel : INotifyPropertyChanged
         var cfg = ConfigService.LoadConfig();
         cfg.Keywords.Clear();
         ConfigService.SaveConfig(cfg);
-        StatusText = "Alle Keywords geloescht.";
+        StatusText = "Alle Keywords & URLs gelöscht.";
         OnPropertyChanged(nameof(CanClearAll));
     }
 
@@ -195,7 +400,6 @@ public class MainViewModel : INotifyPropertyChanged
         if (KeywordsVisible)
             TargetApps.Add(val);
 
-        // Im App-Picker ebenfalls synchronisieren
         var appItem = _allInstalledApps.FirstOrDefault(a => a.PackageName.Equals(val, StringComparison.OrdinalIgnoreCase));
         if (appItem != null)
         {
@@ -205,14 +409,14 @@ public class MainViewModel : INotifyPropertyChanged
         }
 
         TargetAppInput = "";
-        StatusText = IsTimerRunning ? "App hinzugefuegt (sofort aktiv!)" : "App hinzugefuegt.";
+        StatusText = IsTimerRunning ? "App hinzugefügt (sofort aktiv!)" : "App hinzugefügt.";
     }
 
     public void RemoveTargetApp(string item)
     {
         if (IsTimerRunning)
         {
-            StatusText = "Loeschen waehrend Sperre nicht moeglich!";
+            StatusText = "Löschen während aktivem Timer gesperrt!";
             return;
         }
 
@@ -223,7 +427,6 @@ public class MainViewModel : INotifyPropertyChanged
             cfg.TargetApps.RemoveAll(t => t.Equals(item, StringComparison.OrdinalIgnoreCase));
             ConfigService.SaveConfig(cfg);
 
-            // Im App-Picker ebenfalls synchronisieren
             var appItem = _allInstalledApps.FirstOrDefault(a => a.PackageName.Equals(item, StringComparison.OrdinalIgnoreCase));
             if (appItem != null)
             {
@@ -282,16 +485,15 @@ public class MainViewModel : INotifyPropertyChanged
     {
         if (item.IsBrowser)
         {
-            StatusText = "Webbrowser werden bereits automatisch lückenlos geschützt!";
+            StatusText = "Alle Webbrowser werden bereits automatisch überwacht!";
             return;
         }
 
         if (item.IsSelected)
         {
-            // Abwählen / Entfernen
             if (IsTimerRunning)
             {
-                StatusText = "Loeschen waehrend Sperre nicht moeglich!";
+                StatusText = "Entfernen während aktivem Timer gesperrt!";
                 return;
             }
 
@@ -308,7 +510,6 @@ public class MainViewModel : INotifyPropertyChanged
         }
         else
         {
-            // Auswählen / Hinzufügen
             var cfg = ConfigService.LoadConfig();
             if (!cfg.TargetApps.Any(t => t.Equals(item.PackageName, StringComparison.OrdinalIgnoreCase)))
             {
@@ -327,18 +528,46 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public void StartTimer()
+    public bool StartTimer()
     {
+#if ANDROID
+        var ctx = global::Android.App.Application.Context;
+        if (!ConfigService.IsAccessibilityServiceEnabled())
+        {
+            StatusText = "⚠ Bitte zuerst Button 1 (Bedienungshilfe) aktivieren!";
+            return false;
+        }
+        if (!Platforms.Android.DeviceAdminReceiver.IsAdminActive(ctx))
+        {
+            StatusText = "⚠ Bitte zuerst Button 2 (Geräteadministrator) aktivieren!";
+            return false;
+        }
+        if (global::Android.OS.Build.VERSION.SdkInt >= global::Android.OS.BuildVersionCodes.M &&
+            !global::Android.Provider.Settings.CanDrawOverlays(ctx))
+        {
+            StatusText = "⚠ Bitte zuerst Button 3 (Hintergrund-Overlay) erlauben!";
+            return false;
+        }
+        if (!ConfigService.HasUsageStatsPermission())
+        {
+            StatusText = "⚠ Bitte zuerst Button 4 (Nutzungszugriff für 0ms-Schutz) erlauben!";
+            return false;
+        }
+#endif
+
         int d = int.TryParse(Days, out int days) ? days : 0;
         int h = int.TryParse(Hours, out int hours) ? hours : 0;
         int m = int.TryParse(Minutes, out int mins) ? mins : 0;
         int total = (d * 1440) + (h * 60) + m;
 
-        if (total <= 0) { StatusText = "Zeit zu kurz!"; return; }
+        if (total <= 0)
+        {
+            StatusText = "Bitte mindestens 1 Minute einstellen!";
+            return false;
+        }
 
         var cfg = ConfigService.LoadConfig();
 
-        // Session-Keywords zur Config hinzufuegen
         foreach (var kw in Keywords)
         {
             if (!cfg.Keywords.Any(k => k.Value.Equals(kw.Value, StringComparison.OrdinalIgnoreCase)))
@@ -348,27 +577,33 @@ public class MainViewModel : INotifyPropertyChanged
         cfg.EndTime = DateTime.Now.AddMinutes(total);
         cfg.IsIconHidden = true;
         ConfigService.SaveConfig(cfg);
+        ConfigService.SetDeepLinkOpened(false);
 
         _endTime = cfg.EndTime;
         IsTimerRunning = true;
         IsCountdownVisible = true;
-        IsProtected = true;
-        IsTrapActive = true;
         KeywordsVisible = false;
         IsAppPickerVisible = false;
-        ServiceStatusText = "";
-        ServiceStatusColor = "#0d1117";
-        StatusText = "";
+        StatusText = "🔒 Schutz gestartet!";
 
         Keywords.Clear();
 
 #if ANDROID
-        try { MainActivity.SetAppIconVisible(false); } catch { }
+        try
+        {
+            MainActivity.SetAppIconVisible(false);
+            Platforms.Android.DeviceAdminReceiver.EnforceUninstallProtection(global::Android.App.Application.Context);
+            Platforms.Android.AccessibilityGuardEnforcer.StartMonitoring(global::Android.App.Application.Context);
+        }
+        catch { }
 #endif
+        return true;
     }
 
     public void UpdateCountdown()
     {
+        RefreshPermissionStates();
+
         if (_endTime.HasValue)
         {
             var ts = _endTime.Value - DateTime.Now;
@@ -391,12 +626,7 @@ public class MainViewModel : INotifyPropertyChanged
                 _endTime = cfg.EndTime;
                 IsTimerRunning = true;
                 IsCountdownVisible = true;
-                IsProtected = true;
-                IsTrapActive = true;
                 KeywordsVisible = false;
-                ServiceStatusText = "";
-                ServiceStatusColor = "#0d1117";
-                StatusText = "";
             }
         }
     }
@@ -405,22 +635,25 @@ public class MainViewModel : INotifyPropertyChanged
     {
         IsTimerRunning = false;
         IsCountdownVisible = false;
-        IsProtected = true;
-        IsTrapActive = false;
         KeywordsVisible = false;
         IsAppPickerVisible = false;
         _protectTapCount = 0;
         _endTime = null;
 
-        ServiceStatusText = "";
-        ServiceStatusColor = "#0d1117";
-        StatusText = "";
+        StatusText = "✓ Timer abgelaufen! Voller Zugriff & Bearbeitung freigeschaltet.";
         CountdownText = "";
 
         ConfigService.SetDeepLinkOpened(false);
 
 #if ANDROID
-        try { MainActivity.SetAppIconVisible(true); } catch { }
+        try
+        {
+            MainActivity.SetAppIconVisible(true);
+            Platforms.Android.ContentGuardService.CancelRecoveryAlarm();
+            Platforms.Android.AccessibilityGuardEnforcer.StopMonitoring();
+            Platforms.Android.DeviceAdminReceiver.EnforceUninstallProtection(global::Android.App.Application.Context);
+        }
+        catch { }
 #endif
 
         var cfg = ConfigService.LoadConfig();
@@ -429,7 +662,6 @@ public class MainViewModel : INotifyPropertyChanged
         ConfigService.SaveConfig(cfg);
 
         Keywords.Clear();
-
         OnPropertyChanged(nameof(CanClearAll));
     }
 
@@ -464,12 +696,13 @@ public class MainViewModel : INotifyPropertyChanged
                 Keywords.Clear();
                 foreach (var kw in cfg.Keywords)
                     Keywords.Add(new BlockedKeyword { Value = kw.Value, IsAggressive = kw.IsAggressive });
-                
+
                 TargetApps.Clear();
                 foreach (var ta in cfg.TargetApps)
                     TargetApps.Add(ta);
 
                 KeywordsVisible = true;
+                OnPropertyChanged(nameof(CanClearAll));
             }
         }
     }

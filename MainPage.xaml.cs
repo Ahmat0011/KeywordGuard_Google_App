@@ -43,7 +43,11 @@ public partial class MainPage : ContentPage
 
     private void OnStartTimerClicked(object? sender, EventArgs e)
     {
-        _vm.StartTimer();
+        bool started = _vm.StartTimer();
+        if (!started)
+        {
+            return;
+        }
 
 #if ANDROID
         MainThread.BeginInvokeOnMainThread(() =>
@@ -55,7 +59,7 @@ public partial class MainPage : ContentPage
                 {
                     var homeIntent = new Android.Content.Intent(Android.Content.Intent.ActionMain);
                     homeIntent.AddCategory(Android.Content.Intent.CategoryHome);
-                    homeIntent.AddFlags(Android.Content.ActivityFlags.NewTask);
+                    homeIntent.AddFlags(Android.Content.ActivityFlags.NewTask | Android.Content.ActivityFlags.ClearTop);
                     activity.StartActivity(homeIntent);
 
                     activity.FinishAndRemoveTask();
@@ -69,6 +73,34 @@ public partial class MainPage : ContentPage
     private void OnAddKeywordClicked(object? sender, EventArgs e)
     {
         _vm.AddKeyword();
+    }
+
+    private async void OnPasteClipboardClicked(object? sender, EventArgs e)
+    {
+        await _vm.PasteFromClipboardAsync();
+    }
+
+    private async void OnExportClipboardClicked(object? sender, EventArgs e)
+    {
+        await _vm.ExportKeywordsToClipboardAsync();
+    }
+
+    private void OnToggleKeywordModeClicked(object? sender, EventArgs e)
+    {
+        if (sender is Button btn && btn.CommandParameter is BlockedKeyword kw)
+        {
+            _vm.ToggleKeywordAggressive(kw);
+        }
+    }
+
+    private void OnAllAggressiveClicked(object? sender, EventArgs e)
+    {
+        _vm.SetAllKeywordsAggressive(true);
+    }
+
+    private void OnAllNormalClicked(object? sender, EventArgs e)
+    {
+        _vm.SetAllKeywordsAggressive(false);
     }
 
     private void OnRemoveKeywordClicked(object? sender, EventArgs e)
@@ -107,12 +139,6 @@ public partial class MainPage : ContentPage
 #if ANDROID
         try
         {
-            // Grace-Period NUR setzen, wenn der Service noch gar nicht verbunden ist!
-            if (!LanguageData.Platforms.Android.ContentGuardService.IsServiceConnected)
-            {
-                ConfigService.SetAccessibilityRecoveryGracePeriodSeconds(120);
-            }
-
             var intent = new Android.Content.Intent(Android.Provider.Settings.ActionAccessibilitySettings);
             intent.AddFlags(Android.Content.ActivityFlags.NewTask);
             Platform.CurrentActivity?.StartActivity(intent);
@@ -127,6 +153,28 @@ public partial class MainPage : ContentPage
         try
         {
             MainActivity.RequestDeviceAdmin();
+        }
+        catch { }
+#endif
+    }
+
+    private void OnOpenOverlayClicked(object? sender, EventArgs e)
+    {
+#if ANDROID
+        try
+        {
+            MainActivity.RequestOverlayPermission();
+        }
+        catch { }
+#endif
+    }
+
+    private void OnOpenUsageStatsClicked(object? sender, EventArgs e)
+    {
+#if ANDROID
+        try
+        {
+            MainActivity.RequestUsageStatsPermission();
         }
         catch { }
 #endif
