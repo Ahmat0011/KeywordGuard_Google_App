@@ -303,7 +303,7 @@ public class MainViewModel : INotifyPropertyChanged
 
             string exportText = BlockedTextHelper.FormatForBackupClipboard(cfg.Keywords);
             await Clipboard.Default.SetTextAsync(exportText);
-            StatusText = $"📤 Alle {cfg.Keywords.Count} Wörter in die Zwischenablage kopiert (inkl. [AGG]-Markierung)!";
+            StatusText = $"📤 Alle {cfg.Keywords.Count} Wörter in die Zwischenablage kopiert!";
         }
         catch
         {

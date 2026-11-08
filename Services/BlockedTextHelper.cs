@@ -195,10 +195,7 @@ public static class BlockedTextHelper
             string clean = NormalizeEntry(item.Value);
             if (string.IsNullOrWhiteSpace(clean)) continue;
 
-            if (item.IsAggressive)
-                sb.AppendLine($"[AGG] {clean}");
-            else
-                sb.AppendLine(clean);
+            sb.AppendLine(clean);
         }
         return sb.ToString().TrimEnd();
     }
