@@ -162,58 +162,27 @@ public class MainViewModel : INotifyPropertyChanged
     {
         if (string.IsNullOrWhiteSpace(KeywordInput)) return;
 
-        var rawLines = KeywordInput
-            .Split(new[] { '\r', '\n', ';' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim())
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .ToList();
-
-        if (rawLines.Count == 0) return;
+        var batch = BlockedTextHelper.ParseBatchInput(KeywordInput, IsAggressiveInput);
+        if (batch.Count == 0) return;
 
         var cfg = ConfigService.LoadConfig();
         int addedCount = 0;
         int updatedCount = 0;
 
-        foreach (var rawLine in rawLines)
+        foreach (var item in batch)
         {
-            string val = rawLine;
-            bool lineAggressive = IsAggressiveInput;
-
-            if (val.StartsWith("[AGG]", StringComparison.OrdinalIgnoreCase))
-            {
-                lineAggressive = true;
-                val = val[5..].Trim();
-            }
-            else if (val.StartsWith("[NORM]", StringComparison.OrdinalIgnoreCase))
-            {
-                lineAggressive = false;
-                val = val[6..].Trim();
-            }
-            else if (val.StartsWith("*") && val.Length > 1)
-            {
-                lineAggressive = true;
-                val = val[1..].Trim();
-            }
-
-            if (val.StartsWith("- ") || val.StartsWith("• "))
-            {
-                val = val[2..].Trim();
-            }
-
-            if (string.IsNullOrWhiteSpace(val)) continue;
-
-            var existing = cfg.Keywords.FirstOrDefault(k => k.Value.Equals(val, StringComparison.OrdinalIgnoreCase));
+            var existing = cfg.Keywords.FirstOrDefault(k => k.Value.Equals(item.Value, StringComparison.OrdinalIgnoreCase));
             if (existing == null)
             {
-                cfg.Keywords.Add(new BlockedKeyword { Value = val, IsAggressive = lineAggressive });
+                cfg.Keywords.Add(item);
                 if (KeywordsVisible)
-                    Keywords.Add(new BlockedKeyword { Value = val, IsAggressive = lineAggressive });
+                    Keywords.Add(item);
                 addedCount++;
             }
-            else if (lineAggressive && !existing.IsAggressive)
+            else if (item.IsAggressive && !existing.IsAggressive)
             {
                 existing.IsAggressive = true;
-                var uiItem = Keywords.FirstOrDefault(k => k.Value.Equals(val, StringComparison.OrdinalIgnoreCase));
+                var uiItem = Keywords.FirstOrDefault(k => k.Value.Equals(item.Value, StringComparison.OrdinalIgnoreCase));
                 if (uiItem != null) uiItem.IsAggressive = true;
                 updatedCount++;
             }
@@ -332,16 +301,8 @@ public class MainViewModel : INotifyPropertyChanged
                 return;
             }
 
-            var sb = new StringBuilder();
-            foreach (var kw in cfg.Keywords)
-            {
-                if (kw.IsAggressive)
-                    sb.AppendLine($"[AGG] {kw.Value}");
-                else
-                    sb.AppendLine(kw.Value);
-            }
-
-            await Clipboard.Default.SetTextAsync(sb.ToString().TrimEnd());
+            string exportText = BlockedTextHelper.FormatForBackupClipboard(cfg.Keywords);
+            await Clipboard.Default.SetTextAsync(exportText);
             StatusText = $"📤 Alle {cfg.Keywords.Count} Wörter in die Zwischenablage kopiert (inkl. [AGG]-Markierung)!";
         }
         catch

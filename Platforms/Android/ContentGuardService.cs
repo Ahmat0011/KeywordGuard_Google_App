@@ -980,22 +980,14 @@ public class ContentGuardService : AccessibilityService
     private static string NormalizeKeywordOrUrl(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return "";
-        string s = raw.Trim();
-
-        if (s.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            s = s[8..];
-        else if (s.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
-            s = s[7..];
-
-        if (s.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
-            s = s[4..];
-
-        return s.TrimEnd('/');
+        string s = BlockedTextHelper.NormalizeEntry(raw);
+        return BlockedTextHelper.StripUrlProtocolAndWww(s);
     }
 
     private static string NormalizeTextForUrlMatch(string text)
     {
-        string s = text.Trim();
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        string s = BlockedTextHelper.NormalizeEntry(text);
         if (s.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             s = s[8..];
         else if (s.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
